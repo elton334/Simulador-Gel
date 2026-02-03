@@ -1,6 +1,6 @@
 import streamlit as st
 import plotly.graph_objects as go
-import math # <--- CORREÇÃO: Importado no início
+import math # Importante estar aqui no topo
 from Bio.Seq import Seq
 from Bio.Restriction import RestrictionBatch, Analysis, CommOnly
 from io import StringIO
@@ -144,7 +144,6 @@ if any(dados_para_plotar):
     for i, bandas in enumerate(dados_para_plotar):
         x_center = i + 1
         eh_ladder = (labels_eixo_x[i] == "M")
-        ladder_name = nomes_ladders[i]
         
         massa_total = sum(bandas) if bandas and not eh_ladder else 1
         
@@ -154,7 +153,6 @@ if any(dados_para_plotar):
             opacity = 0.8
             
             if eh_ladder:
-                # Destaque para bandas de referência
                 if tam in [3000, 1000, 500]: 
                     width = 4
                     opacity = 1.0
@@ -165,7 +163,6 @@ if any(dados_para_plotar):
                     width = 1.5
                     opacity = 0.7
             else:
-                # Física: Intensidade baseada na massa
                 fracao_massa = tam / massa_total
                 width = 2 + (6 * fracao_massa) 
                 opacity = 0.5 + (0.5 * fracao_massa)
@@ -177,7 +174,6 @@ if any(dados_para_plotar):
                 mode='lines',
                 line=dict(color=line_color, width=width),
                 opacity=opacity,
-                name=f"Poço {labels_eixo_x[i]}",
                 showlegend=False,
                 hoverinfo='text',
                 hovertext=f"<b>Tamanho:</b> {tam} pb<br><b>Poço:</b> {labels_eixo_x[i]}<br>{detalhes_hover[i]}"
@@ -185,16 +181,16 @@ if any(dados_para_plotar):
 
             # --- RÓTULOS LATERAIS DO LADDER ---
             if eh_ladder:
+                # Nota: Em eixos Log, passamos o valor real para y, Plotly ajusta.
                 fig.add_annotation(
                     x=x_center - 0.5,
-                    y=tam, # CORREÇÃO: Valor direto, Plotly lida com o log
+                    y=tam, 
                     text=f"{tam}",
                     showarrow=False,
                     xanchor="right",
                     font=dict(color=text_color, size=9),
                     yshift=0
                 )
-                # Linha guia fina
                 fig.add_shape(
                     type="line",
                     x0=x_center - 0.5, x1=x_center - 0.35,
@@ -203,12 +199,14 @@ if any(dados_para_plotar):
                     opacity=0.3
                 )
 
-    # --- CONFIGURAÇÃO DOS EIXOS E LAYOUT ---
+    # --- CONFIGURAÇÃO SEGURA DO LAYOUT ---
     fig.update_layout(
         plot_bgcolor=bg_color,
         paper_bgcolor=bg_color,
         height=600,
         margin=dict(t=30, b=30, l=60, r=30),
+        
+        # Configuração do Eixo X
         xaxis=dict(
             tickmode='array',
             tickvals=list(range(1, num_pocos + 1)),
@@ -218,21 +216,22 @@ if any(dados_para_plotar):
             zeroline=False,
             range=[0.5, num_pocos + 0.5]
         ),
+        
+        # Configuração do Eixo Y (Logarítmico)
         yaxis=dict(
             type='log',
-            # Definimos o range explicitamente invertido: log(max) em cima, log(min) em baixo?
-            # Plotly log axis é meio chato. Geralmente [log10(max), log10(min)] inverte.
+            # Intervalo Invertido Manualmente: [log10(max), log10(min)]
+            # Isso garante que 20000 fique no topo e 80 embaixo
             range=[math.log10(20000), math.log10(80)], 
             showgrid=False,
             zeroline=False,
-            title="pb",
-            titlefont=dict(color=text_color, size=14),
+            title=dict(text="pb", font=dict(color=text_color, size=14)),
             tickfont=dict(color=text_color),
             showticklabels=False 
         )
     )
     
-    # Label "pb" no topo
+    # Label extra "pb" no topo
     fig.add_annotation(
         x=-0.05, y=1, xref="paper", yref="paper",
         text="pb", showarrow=False,
