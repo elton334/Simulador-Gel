@@ -23,17 +23,18 @@ LADDERS = {
 def processar_upload(input_data):
     """Lê arquivos FASTA (.fasta, .txt) ou SnapGene (.dna)."""
     try:
-        nome_arquivo = input_data.name.lower()
+        nome_arquivo = input_data.name
+        # Remove extensão para usar como nome sugerido
+        nome_sugerido = nome_arquivo.rsplit('.', 1)[0]
         
         # --- CASO 1: Arquivo SnapGene (.dna) ---
-        if nome_arquivo.endswith('.dna'):
+        if nome_arquivo.lower().endswith('.dna'):
             try:
-                # Requer 'pip install construct' para ler SnapGene
                 bytes_io = BytesIO(input_data.getvalue())
                 record = SeqIO.read(bytes_io, "snapgene")
-                return record.id, str(record.seq).upper()
+                return nome_sugerido, str(record.seq).upper()
             except Exception as e:
-                return "Erro", f"Erro ao ler .dna (Instale a biblioteca 'construct'): {str(e)}"
+                return "Erro", f"Erro .dna: {str(e)}"
 
         # --- CASO 2: Arquivo Texto (FASTA/TXT) ---
         bytes_data = input_data.getvalue()
@@ -46,7 +47,8 @@ def processar_upload(input_data):
             try:
                 iterator = SeqIO.parse(StringIO(conteudo), "fasta")
                 record = next(iterator)
-                return record.id, str(record.seq).upper()
+                # Usa ID do fasta ou nome do arquivo
+                return record.id if record.id else nome_sugerido, str(record.seq).upper()
             except:
                 pass 
 
@@ -60,9 +62,9 @@ def processar_upload(input_data):
         
         seq_final = "".join(seq_limpa.split()).upper()
         if any(c not in "ATGCNRYKMSWBDHV" for c in seq_final[:100]): 
-             return "Erro", "Arquivo não parece conter DNA válido."
+             return "Erro", "Arquivo inválido."
 
-        return input_data.name, seq_final
+        return nome_sugerido, seq_final
 
     except Exception as e:
         return "Erro", str(e)
@@ -86,10 +88,9 @@ def calcular_digestao(sequencia, enzimas, eh_circular):
     seq_obj = Seq(sequencia)
     tamanho_total = len(seq_obj)
     
-    # CASO: Plasmídeo Uncut
     if eh_circular and not enzimas:
         return [
-            (tamanho_total * 1.4, "Nicked (Relaxed)", tamanho_total),
+            (tamanho_total * 1.4, "Nicked", tamanho_total),
             (tamanho_total * 0.7, "Supercoiled", tamanho_total)
         ]
     
@@ -102,7 +103,7 @@ def calcular_digestao(sequencia, enzimas, eh_circular):
     locais = sorted(list(set([local for lista in cortes.values() for local in lista])))
     
     if not locais: 
-        tipo = "Circular (Sítio Ausente)" if eh_circular else "Linear (Não Cortado)"
+        tipo = "Circ. (Sítio Ausente)" if eh_circular else "Lin. (Não Cortado)"
         return [(tamanho_total, tipo, tamanho_total)]
         
     fragmentos = []
@@ -124,14 +125,16 @@ def calcular_digestao(sequencia, enzimas, eh_circular):
 
 # --- INTERFACE ---
 st.title("🧪 Simulador de Eletroforese Interativo")
-st.markdown("Suporte para: **.dna**, **.fasta** e **.txt**.")
 
 with st.sidebar:
     st.header("Configurações")
     num_pocos = st.slider("Número de Poços", 1, 15, 3) 
     st.divider()
-    inverter_cores = st.toggle("Inverter Cores (Modo Impressão)", value=False)
-    st.caption("Nota: A visualização simula um pente padrão de 12 poços para manter a proporção real.")
+    inverter_cores = st.toggle("Inverter Cores", value=False)
+    
+    # SUGESTÃO DE OURO: Ajuste da % de Agarose (Muda o Zoom Vertical)
+    agarose = st.slider("Concentração de Agarose (%)", 0.5, 2.0, 1.0, 0.1)
+    st.caption("Ajustar a agarose altera a faixa de visualização (Zoom vertical).")
 
 dados_para_plotar = []
 labels_eixo_x = []
@@ -146,36 +149,48 @@ for i in range(num_pocos):
         with st.expander(f"Poço {i+1}", expanded=(i==0)):
             tipo = st.radio(f"Conteúdo {i+1}:", ["Amostra", "Ladder"], key=f"t_{i}", horizontal=True)
             
+            # --- SUGESTÃO IMPLEMENTADA: NOME DO POÇO ---
+            # O padrão é o número, mas você pode mudar para "pUC19", "Clone 1", etc.
+            rotulo_padrao = str(i+1)
+            
             if tipo == "Ladder":
                 lad = st.selectbox("Ladder:", list(LADDERS.keys()), key=f"l_{i}")
                 ladder_data = [(tam, "Ladder", tam) for tam in LADDERS[lad]]
                 dados_para_plotar.append(ladder_data)
-                labels_eixo_x.append("M")
+                
+                # Se for ladder, sugerimos "M" ou o nome do ladder
+                rotulo_custom = st.text_input("Nome no Gel:", value="M", key=f"lbl_{i}")
+                labels_eixo_x.append(rotulo_custom)
+                
                 nomes_ladders.append(lad)
                 detalhes_hover.append(lad)
             else:
                 nomes_ladders.append(None)
-                tab_f, tab_t = st.tabs(["Arquivo (.dna/.fasta)", "Texto"])
-                seq, nome = "", f"{i+1}"
+                tab_f, tab_t = st.tabs(["Arquivo", "Texto"])
+                seq, nome_arquivo = "", ""
                 
                 with tab_f:
                     up = st.file_uploader("Arquivo", type=['dna', 'fasta', 'txt', 'fa'], key=f"u_{i}")
                     if up: 
-                        nome, seq = processar_upload(up)
-                        if nome == "Erro": 
-                            st.error(seq)
-                            seq = ""
+                        nome_arquivo, seq = processar_upload(up)
+                        if nome_arquivo == "Erro": 
+                            st.error(seq); seq = ""
                 with tab_t:
                     txt = st.text_area("Colar Sequência", height=70, key=f"tx_{i}")
                     if txt and not seq: 
                         nome_t, seq_t = processar_texto_manual(txt)
-                        if nome_t != "Seq Manual": nome = nome_t
+                        if nome_t != "Seq Manual": nome_arquivo = nome_t
                         seq = seq_t
                 
                 c1, c2 = st.columns(2)
                 circ = c1.checkbox("Circular?", True, key=f"c_{i}")
                 enz = c2.multiselect("Enzimas", TODAS_ENZIMAS, key=f"e_{i}")
                 
+                # Usa o nome do arquivo como sugestão de rótulo se disponível
+                val_rotulo = nome_arquivo if nome_arquivo else str(i+1)
+                rotulo_custom = st.text_input("Nome no Gel:", value=val_rotulo[:10], key=f"lbl_{i}")
+                labels_eixo_x.append(rotulo_custom)
+
                 info_texto = f"Circular: {circ}<br>Enzimas: {', '.join(enz) if enz else 'Uncut'}"
                 detalhes_hover.append(info_texto)
 
@@ -183,13 +198,10 @@ for i in range(num_pocos):
                     try:
                         res = calcular_digestao(seq, enz, circ)
                         dados_para_plotar.append(res)
-                        labels_eixo_x.append(str(i+1))
                     except Exception as e:
                         dados_para_plotar.append([])
-                        labels_eixo_x.append("Erro")
                 else:
                     dados_para_plotar.append([])
-                    labels_eixo_x.append(str(i+1))
 
 st.divider()
 
@@ -198,41 +210,36 @@ if any(dados_para_plotar):
     line_color = 'black' if inverter_cores else 'white'
     text_color = 'black' if inverter_cores else 'white'
     
+    # Define limites verticais baseado na agarose (Física aproximada)
+    # 0.7% vê até 20kb. 2.0% vê até 2kb.
+    min_view = 50 + (100 * (agarose - 0.5)) 
+    max_view = 25000 / (agarose * 0.8)
+
     fig = go.Figure()
 
     for i, lista_bandas in enumerate(dados_para_plotar):
         x_center = i + 1
-        eh_ladder = (labels_eixo_x[i] == "M")
+        eh_ladder = (nomes_ladders[i] is not None)
         
         if lista_bandas:
              massa_total = sum([b[2] for b in lista_bandas]) if not eh_ladder else 1
         
         for (tam_aparente, tipo_banda, tam_real) in lista_bandas:
-            # --- ESTÉTICA AJUSTADA ---
-            width = 2
-            opacity = 0.8
-            
+            # Filtra bandas fora do alcance visual da agarose
+            if tam_aparente < min_view or tam_aparente > max_view: continue
+
+            width = 2; opacity = 0.8
             if eh_ladder:
-                if tam_aparente in [3000, 1000, 500]: 
-                    width = 7; opacity = 1.0
-                elif tam_aparente >= 5000:
-                    width = 5; opacity = 0.9
-                else:
-                    width = 3; opacity = 0.7
+                if tam_aparente in [3000, 1000, 500]: width = 7; opacity = 1.0
+                elif tam_aparente >= 5000: width = 5; opacity = 0.9
+                else: width = 3; opacity = 0.7
             else:
-                if tipo_banda == "Supercoiled":
-                    fracao = 0.7
-                elif tipo_banda == "Nicked (Relaxed)":
-                    fracao = 0.3
-                else:
-                    fracao = tam_real / massa_total if massa_total > 0 else 0.5
-                
+                if tipo_banda == "Supercoiled": fracao = 0.7
+                elif tipo_banda == "Nicked": fracao = 0.3
+                else: fracao = tam_real / massa_total if massa_total > 0 else 0.5
                 width = 3 + (8 * fracao)
                 opacity = 0.6 + (0.4 * fracao)
 
-            # --- DESENHO COM BORDAS ARREDONDADAS ---
-            # AJUSTE FINO: Reduzimos a largura horizontal da banda de 0.35 para 0.28
-            # Isso cria mais espaço vazio entre as raias (estética da sua imagem 3)
             largura_banda = 0.28 
             
             fig.add_trace(go.Scatter(
@@ -244,47 +251,33 @@ if any(dados_para_plotar):
                 opacity=opacity,
                 showlegend=False,
                 hoverinfo='text',
-                hovertext=f"<b>Aparente: ~{int(tam_aparente)} pb</b><br>Real: {tam_real} pb<br>Tipo: {tipo_banda}<br>Poço: {labels_eixo_x[i]}"
+                hovertext=f"<b>~{int(tam_aparente)} pb</b><br>Real: {tam_real}<br>{labels_eixo_x[i]}"
             ))
 
             if eh_ladder:
-                # Texto do ladder agora mais próximo (0.35) devido à banda mais estreita
                 fig.add_trace(go.Scatter(
-                    x=[x_center - 0.45], 
-                    y=[tam_aparente],
-                    mode="text",
-                    text=[str(tam_aparente)],
-                    textposition="middle left",
+                    x=[x_center - 0.45], y=[tam_aparente], mode="text",
+                    text=[str(tam_aparente)], textposition="middle left",
                     textfont=dict(color=text_color, size=10),
-                    showlegend=False,
-                    hoverinfo='skip'
+                    showlegend=False, hoverinfo='skip'
                 ))
 
-    # --- LAYOUT COM ESCALA FIXA (ZOOM OUT FORÇADO) ---
-    
-    # Define o range mínimo como 12 poços. 
-    # Isso evita que bandas de 3 poços fiquem "gordas" como barras de chocolate.
+    # --- LAYOUT FINAL ---
     LARGURA_MINIMA = 12
     max_range = max(num_pocos, LARGURA_MINIMA) + 0.5
 
     fig.update_layout(
-        plot_bgcolor=bg_color,
-        paper_bgcolor=bg_color,
-        height=700,
-        margin=dict(t=40, b=40, l=40, r=40),
+        plot_bgcolor=bg_color, paper_bgcolor=bg_color,
+        height=700, margin=dict(t=40, b=40, l=40, r=40),
         xaxis=dict(
-            tickmode='array',
-            tickvals=list(range(1, num_pocos + 1)),
-            ticktext=labels_eixo_x,
+            tickmode='array', tickvals=list(range(1, num_pocos + 1)),
+            ticktext=labels_eixo_x, # AGORA USA SEUS NOMES PERSONALIZADOS
             tickfont=dict(color=text_color, size=14, family='Arial Black'),
-            showgrid=False, 
-            zeroline=False, 
-            # AQUI: Fixa o eixo X para mostrar sempre pelo menos 12 poços de largura
-            range=[0.2, max_range] 
+            showgrid=False, zeroline=False, range=[0.2, max_range] 
         ),
         yaxis=dict(
             type='log',
-            range=[math.log10(80), math.log10(20000)], # Invertido
+            range=[math.log10(min_view), math.log10(max_view)], # Zoom dinâmico pela agarose
             showgrid=False, zeroline=False, showticklabels=False
         )
     )
@@ -293,4 +286,4 @@ if any(dados_para_plotar):
     st.plotly_chart(fig, use_container_width=True)
 
 else:
-    st.info("Adicione amostras (.dna ou .fasta) para gerar o gel.")
+    st.info("Adicione amostras para gerar o gel.")
