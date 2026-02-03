@@ -73,7 +73,7 @@ def calcular_digestao(sequencia, enzimas, eh_circular):
     return sorted(fragmentos, reverse=True)
 
 # --- INTERFACE ---
-st.title("🧪 Simulador de Eletroforese Profissional")
+st.title("🧪 Simulador de Eletroforese")
 st.markdown(f"Base de dados carregada: **{len(TODAS_ENZIMAS)} enzimas comerciais** disponíveis.")
 
 with st.sidebar:
