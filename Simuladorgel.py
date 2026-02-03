@@ -9,7 +9,7 @@ from Bio import SeqIO
 
 # --- CONFIGURAÇÃO INICIAL DA PÁGINA ---
 st.set_page_config(
-    page_title="Simulador de Eletroforese | Biofármacos", 
+    page_title="Simulador de Eletroforese", # Título da aba limpo
     layout="wide", 
     page_icon="🧬",
     initial_sidebar_state="expanded"
@@ -153,7 +153,7 @@ with st.sidebar:
     
     st.divider()
 
-    # 3. Estilo Visual (ORDEM ALTERADA)
+    # 3. Estilo Visual
     estilo_gel = st.selectbox(
         "Estilo Visual", 
         ["Profissional (Dark P&B)", "Publicação (Light P&B)", "Neon (Verde/Laranja)"]
@@ -161,11 +161,25 @@ with st.sidebar:
     
     st.divider()
     
-    with st.expander("❓ Ajuda"):
+    # --- GUIA DE USO ---
+    with st.expander("❓ Guia de Uso & Formatos"):
         st.markdown("""
-        * **Plasmídeos:** Marque "Circular".
-        * **Nomes:** Use o campo "Nome da Amostra".
-        * **Zoom:** Use o slider de Agarose.
+        ### 📂 Formatos Aceitos
+        * **SnapGene (.dna):** Arquivos binários nativos.
+        * **FASTA (.fasta, .fa):** Formato padrão.
+        * **Texto (.txt):** Sequência crua (ATGC...).
+        
+        ### ⚙️ Como Usar
+        1. **Configurar:** Defina o número de poços e a % de agarose.
+        2. **Preencher:** Escolha se o poço é *Amostra* ou *Ladder*.
+        3. **Detalhes:** * Arraste o arquivo.
+           * Se for Plasmídeo, marque **Circular**.
+           * Selecione as **Enzimas**.
+        4. **Rotular:** Use o campo "Nome da Amostra".
+        
+        ### 💡 Dicas
+        * **Plasmídeos:** Se não selecionar enzimas, o simulador mostra as formas *Supercoiled* e *Nicked*.
+        * **Relatório:** Baixe a tabela de fragmentos no final da página.
         """)
 
 # --- CONTEÚDO PRINCIPAL ---
@@ -192,7 +206,6 @@ for i in range(num_pocos):
                 ladder_data = [(tam, "Ladder", tam) for tam in LADDERS[lad]]
                 dados_para_plotar.append(ladder_data)
                 
-                # Rótulo alterado para "Nome da Amostra"
                 rotulo_custom = st.text_input("Nome da Amostra:", value="M", key=f"lbl_{i}")
                 labels_eixo_x.append(rotulo_custom)
                 nomes_ladders.append(lad)
