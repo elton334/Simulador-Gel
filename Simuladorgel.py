@@ -42,14 +42,31 @@ def calcular_digestao(sequencia, enzimas, eh_circular):
     seq_obj = Seq(sequencia)
     tamanho_total = len(seq_obj)
     
-    if not enzimas: return [tamanho_total]
+    # CASO ESPECIAL: Plasmídeo Circular Não Cortado (Uncut)
+    if eh_circular and not enzimas:
+        # Simulação de migração anômala
+        # Supercoiled: Corre mais rápido (aprox 0.7x do tamanho linear)
+        # Nicked/Relaxed: Corre mais devagar (aprox 1.4x do tamanho linear)
+        
+        # Retorna lista de tuplas: (Tamanho Aparente, Tipo, Tamanho Real)
+        return [
+            (tamanho_total * 1.4, "Nicked (Relaxed)", tamanho_total),
+            (tamanho_total * 0.7, "Supercoiled", tamanho_total)
+        ]
     
+    if not enzimas: 
+        # Linear não cortado
+        return [(tamanho_total, "Linear", tamanho_total)]
+    
+    # Digestão Normal
     rb = RestrictionBatch(enzimas)
     analise = Analysis(rb, seq_obj, linear=not eh_circular)
     cortes = analise.full()
     locais = sorted(list(set([local for lista in cortes.values() for local in lista])))
     
-    if not locais: return [tamanho_total]
+    if not locais: 
+        # Enzima não cortou (site ausente)
+        return [(tamanho_total, "Circular (Não Cortado - Sítio Ausente)", tamanho_total)] if eh_circular else [(tamanho_total, "Linear (Não Cortado)", tamanho_total)]
         
     fragmentos = []
     if not eh_circular:
@@ -60,13 +77,14 @@ def calcular_digestao(sequencia, enzimas, eh_circular):
         fragmentos.append(tamanho_total - prev)
     else:
         if len(locais) == 1:
-            fragmentos.append(tamanho_total)
+            fragmentos.append(tamanho_total) # Linearizou
         else:
             for i in range(len(locais)-1):
                 fragmentos.append(locais[i+1] - locais[i])
             fragmentos.append((tamanho_total - locais[-1]) + locais[0])
             
-    return sorted(fragmentos, reverse=True)
+    # Formata saida padrão para digestão: (Tamanho, Tipo, Real)
+    return [(frag, "Fragmento", frag) for frag in sorted(fragmentos, reverse=True)]
 
 # --- INTERFACE ---
 st.title("🧪 Simulador de Eletroforese Interativo")
@@ -77,7 +95,7 @@ with st.sidebar:
     num_pocos = st.slider("Número de Poços", 1, 15, 10)
     st.divider()
     inverter_cores = st.toggle("Inverter Cores (Modo Impressão)", value=False)
-    st.caption("Nota: A espessura da banda indica a massa relativa de DNA.")
+    st.caption("Nota: Plasmídeos não cortados mostram bandas Supercoiled e Nicked.")
 
 dados_para_plotar = []
 labels_eixo_x = []
@@ -94,7 +112,9 @@ for i in range(num_pocos):
             
             if tipo == "Ladder":
                 lad = st.selectbox("Ladder:", list(LADDERS.keys()), key=f"l_{i}")
-                dados_para_plotar.append(LADDERS[lad])
+                # Padroniza ladder para o formato (Tamanho, Tipo, Real)
+                ladder_data = [(tam, "Ladder", tam) for tam in LADDERS[lad]]
+                dados_para_plotar.append(ladder_data)
                 labels_eixo_x.append("M")
                 nomes_ladders.append(lad)
                 detalhes_hover.append(lad)
@@ -117,11 +137,12 @@ for i in range(num_pocos):
                 circ = c1.checkbox("Circular?", True, key=f"c_{i}")
                 enz = c2.multiselect("Enzimas", TODAS_ENZIMAS, key=f"e_{i}")
                 
-                info_texto = f"Circular: {circ}<br>Enzimas: {', '.join(enz) if enz else 'Nenhuma'}"
+                info_texto = f"Circular: {circ}<br>Enzimas: {', '.join(enz) if enz else 'Nenhuma (Uncut)'}"
                 detalhes_hover.append(info_texto)
 
                 if seq:
                     try:
+                        # Agora retorna tuplas (Tamanho Aparente, Tipo, Tamanho Real)
                         res = calcular_digestao(seq, enz, circ)
                         dados_para_plotar.append(res)
                         labels_eixo_x.append(str(i+1))
@@ -141,90 +162,89 @@ if any(dados_para_plotar):
     
     fig = go.Figure()
 
-    for i, bandas in enumerate(dados_para_plotar):
+    for i, lista_bandas in enumerate(dados_para_plotar):
         x_center = i + 1
         eh_ladder = (labels_eixo_x[i] == "M")
         
-        massa_total = sum(bandas) if bandas and not eh_ladder else 1
+        # Calcula massa total SOMENTE dos fragmentos reais para proporção
+        # Se for uncut (plasmídeo inteiro), a massa total é o tamanho do plasmídeo (aparece 2x mas a massa é dividida)
+        # Para simplificar visualização: usamos o tamanho real da maior banda como referência de massa
+        if lista_bandas:
+             massa_total = sum([b[2] for b in lista_bandas]) if not eh_ladder else 1
         
-        for tam in bandas:
-            # --- ESTÉTICA (Espessura) ---
+        for (tam_aparente, tipo_banda, tam_real) in lista_bandas:
+            # --- ESTÉTICA ---
             width = 2
             opacity = 0.8
             
             if eh_ladder:
-                if tam in [3000, 1000, 500]: 
-                    width = 7 # Aumentei um pouco para ficar mais visível o arredondado
-                    opacity = 1.0
-                elif tam >= 5000:
-                    width = 5
-                    opacity = 0.9
+                if tam_aparente in [3000, 1000, 500]: 
+                    width = 7; opacity = 1.0
+                elif tam_aparente >= 5000:
+                    width = 5; opacity = 0.9
                 else:
-                    width = 3
-                    opacity = 0.7
+                    width = 3; opacity = 0.7
             else:
-                fracao_massa = tam / massa_total
-                # Ajuste fino na espessura para o novo modo arredondado
-                width = 3 + (8 * fracao_massa) 
-                opacity = 0.6 + (0.4 * fracao_massa)
+                # Se for plasmídeo uncut, as bandas Supercoiled e Nicked dividem a massa
+                # Mas visualmente, Supercoiled costuma ser mais forte e nítida.
+                if tipo_banda == "Supercoiled":
+                    fracao = 0.7 # Supercoiled brilha mais pois é compacta
+                elif tipo_banda == "Nicked (Relaxed)":
+                    fracao = 0.3 # Nicked é mais difusa
+                else:
+                    fracao = tam_real / massa_total if massa_total > 0 else 0.5
+                
+                width = 3 + (8 * fracao)
+                opacity = 0.6 + (0.4 * fracao)
 
-            # --- DESENHAR BANDA (AGORA COM BORDAS ARREDONDADAS) ---
+            # --- DESENHO DA BANDA ---
             fig.add_trace(go.Scatter(
                 x=[x_center - 0.35, x_center + 0.35],
-                y=[tam, tam],
-                # O TRUQUE: Usar 'lines+markers' adiciona círculos nas pontas
-                mode='lines+markers', 
+                y=[tam_aparente, tam_aparente],
+                mode='lines+markers',
                 line=dict(color=line_color, width=width),
-                # O marcador tem a mesma cor e tamanho da linha, criando o efeito redondo
                 marker=dict(color=line_color, size=width, symbol='circle'),
                 opacity=opacity,
                 showlegend=False,
                 hoverinfo='text',
-                hovertext=f"<b>{tam} pb</b><br>{labels_eixo_x[i]}<br>{detalhes_hover[i]}"
+                # Tooltip Educativo: Mostra o tamanho aparente E o real
+                hovertext=f"<b>Aparente: ~{int(tam_aparente)} pb</b><br>Real: {tam_real} pb<br>Tipo: {tipo_banda}<br>Poço: {labels_eixo_x[i]}"
             ))
 
             # --- RÓTULOS DO LADDER ---
             if eh_ladder:
                 fig.add_trace(go.Scatter(
                     x=[x_center - 0.5], 
-                    y=[tam],
+                    y=[tam_aparente],
                     mode="text",
-                    text=[str(tam)],
+                    text=[str(tam_aparente)],
                     textposition="middle left",
                     textfont=dict(color=text_color, size=10),
                     showlegend=False,
                     hoverinfo='skip'
                 ))
 
-    # --- LAYOUT E EIXOS ---
+    # --- LAYOUT ---
     fig.update_layout(
         plot_bgcolor=bg_color,
         paper_bgcolor=bg_color,
         height=700,
         margin=dict(t=40, b=40, l=40, r=40),
-        
         xaxis=dict(
             tickmode='array',
             tickvals=list(range(1, num_pocos + 1)),
             ticktext=labels_eixo_x,
             tickfont=dict(color=text_color, size=14, family='Arial Black'),
-            showgrid=False,
-            zeroline=False,
-            range=[0.2, num_pocos + 0.8] 
+            showgrid=False, zeroline=False, range=[0.2, num_pocos + 0.8] 
         ),
-        
         yaxis=dict(
             type='log',
-            # ORDEM CORRETA: [log(Baixo), log(Cima)]
-            range=[math.log10(80), math.log10(20000)],
-            showgrid=False,
-            zeroline=False,
-            title=dict(text="Tamanho (pb)", font=dict(color=text_color, size=14)),
-            tickfont=dict(color=text_color),
-            showticklabels=False
+            range=[math.log10(80), math.log10(20000)], # Invertido
+            showgrid=False, zeroline=False, showticklabels=False
         )
     )
-
+    
+    fig.add_annotation(x=-0.05, y=1, xref="paper", yref="paper", text="pb", showarrow=False, font=dict(color=text_color, size=14, family="Arial Black"))
     st.plotly_chart(fig, use_container_width=True)
 
 else:
