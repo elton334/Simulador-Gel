@@ -31,23 +31,20 @@ def processar_upload(input_data):
         # --- CASO 1: Arquivo SnapGene (.dna) ---
         if nome_arquivo.endswith('.dna'):
             try:
-                # SnapGene é binário, usamos BytesIO
-                # Requer 'pip install construct'
+                # Requer 'pip install construct' para ler SnapGene
                 bytes_io = BytesIO(input_data.getvalue())
                 record = SeqIO.read(bytes_io, "snapgene")
                 return record.id, str(record.seq).upper()
             except Exception as e:
-                return "Erro", f"Erro ao ler .dna (Instalou 'construct'?): {str(e)}"
+                return "Erro", f"Erro ao ler .dna (Verifique se instalou a lib 'construct'): {str(e)}"
 
         # --- CASO 2: Arquivo Texto (FASTA/TXT) ---
-        # Decodifica bytes para string
         bytes_data = input_data.getvalue()
         try:
             conteudo = bytes_data.decode("utf-8")
         except UnicodeDecodeError:
             conteudo = bytes_data.decode("latin-1")
 
-        # Tenta parsear como FASTA
         if ">" in conteudo:
             try:
                 iterator = SeqIO.parse(StringIO(conteudo), "fasta")
@@ -65,10 +62,8 @@ def processar_upload(input_data):
             seq_limpa += linha
         
         seq_final = "".join(seq_limpa.split()).upper()
-        
-        # Validação básica de DNA
-        if any(c not in "ATGCNRYKMSWBDHV" for c in seq_final[:100]): # Checa os primeiros 100 chars
-             return "Erro", "Arquivo não parece conter sequência de DNA válida."
+        if any(c not in "ATGCNRYKMSWBDHV" for c in seq_final[:100]): 
+             return "Erro", "Arquivo não parece conter DNA válido."
 
         return input_data.name, seq_final
 
@@ -76,7 +71,6 @@ def processar_upload(input_data):
         return "Erro", str(e)
 
 def processar_texto_manual(texto):
-    """Processa texto colado manualmente."""
     try:
         if ">" in texto:
             iterator = SeqIO.parse(StringIO(texto), "fasta")
@@ -89,8 +83,6 @@ def processar_texto_manual(texto):
 
 def calcular_digestao(sequencia, enzimas, eh_circular):
     if not sequencia or sequencia.startswith("Erro"): return []
-    
-    # Limpeza de caracteres não-DNA
     sequencia = "".join([c for c in sequencia if c in "ATGCMRWSYKVHDBN"])
     if not sequencia: return []
 
@@ -135,14 +127,14 @@ def calcular_digestao(sequencia, enzimas, eh_circular):
 
 # --- INTERFACE ---
 st.title("🧪 Simulador de Eletroforese Interativo")
-st.markdown("Suporte para: **.dna (SnapGene)**, **.fasta** e **.txt**.")
+st.markdown("Suporte para: **.dna**, **.fasta** e **.txt**.")
 
 with st.sidebar:
     st.header("Configurações")
-    num_pocos = st.slider("Número de Poços", 1, 15, 10)
+    num_pocos = st.slider("Número de Poços", 1, 15, 3) # Começa com 3
     st.divider()
     inverter_cores = st.toggle("Inverter Cores (Modo Impressão)", value=False)
-    st.caption("Nota: Plasmídeos não cortados mostram bandas Supercoiled e Nicked.")
+    st.caption("Nota: A visualização simula um pente padrão de 15 poços para manter a proporção real.")
 
 dados_para_plotar = []
 labels_eixo_x = []
@@ -166,7 +158,7 @@ for i in range(num_pocos):
                 detalhes_hover.append(lad)
             else:
                 nomes_ladders.append(None)
-                tab_f, tab_t = st.tabs(["Arquivo (.dna/.fasta)", "Texto"])
+                tab_f, tab_t = st.tabs(["Arquivo", "Texto"])
                 seq, nome = "", f"{i+1}"
                 
                 with tab_f:
@@ -174,7 +166,7 @@ for i in range(num_pocos):
                     if up: 
                         nome, seq = processar_upload(up)
                         if nome == "Erro": 
-                            st.error(seq) # Mostra mensagem de erro detalhada
+                            st.error(seq)
                             seq = ""
                 with tab_t:
                     txt = st.text_area("Colar Sequência", height=70, key=f"tx_{i}")
@@ -219,7 +211,7 @@ if any(dados_para_plotar):
              massa_total = sum([b[2] for b in lista_bandas]) if not eh_ladder else 1
         
         for (tam_aparente, tipo_banda, tam_real) in lista_bandas:
-            # --- VISUAL (Mantido das versões anteriores) ---
+            # --- ESTÉTICA ---
             width = 2
             opacity = 0.8
             
@@ -241,7 +233,7 @@ if any(dados_para_plotar):
                 width = 3 + (8 * fracao)
                 opacity = 0.6 + (0.4 * fracao)
 
-            # --- DESENHO COM BORDAS ARREDONDADAS ---
+            # --- DESENHO (BORDAS ARREDONDADAS) ---
             fig.add_trace(go.Scatter(
                 x=[x_center - 0.35, x_center + 0.35],
                 y=[tam_aparente, tam_aparente],
@@ -266,7 +258,14 @@ if any(dados_para_plotar):
                     hoverinfo='skip'
                 ))
 
-    # --- LAYOUT ---
+    # --- LAYOUT CORRIGIDO PARA LARGURA FIXA ---
+    
+    # Define uma largura mínima (como se fosse um pente de 15 poços)
+    # Se o usuário escolher mais de 15, o gráfico expande.
+    # Se escolher menos (ex: 3), ele mostra o espaço vazio até o 15.
+    LARGURA_PADRAO = 15 
+    max_range = max(num_pocos, LARGURA_PADRAO) + 0.5
+
     fig.update_layout(
         plot_bgcolor=bg_color,
         paper_bgcolor=bg_color,
@@ -277,7 +276,10 @@ if any(dados_para_plotar):
             tickvals=list(range(1, num_pocos + 1)),
             ticktext=labels_eixo_x,
             tickfont=dict(color=text_color, size=14, family='Arial Black'),
-            showgrid=False, zeroline=False, range=[0.2, num_pocos + 0.8] 
+            showgrid=False, 
+            zeroline=False, 
+            # AQUI ESTÁ A MÁGICA: Fixamos o range final em pelo menos 15
+            range=[0.2, max_range] 
         ),
         yaxis=dict(
             type='log',
