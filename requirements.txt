@@ -2,3 +2,4 @@ streamlit
 biopython
 matplotlib
 plotly
+construct
