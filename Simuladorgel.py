@@ -6,8 +6,32 @@ from Bio.Restriction import RestrictionBatch, Analysis, CommOnly
 from io import StringIO, BytesIO
 from Bio import SeqIO
 
-# --- CONFIGURAÇÃO INICIAL ---
-st.set_page_config(page_title="Simulador de Gel Interativo", layout="wide", page_icon="🧬")
+# --- CONFIGURAÇÃO INICIAL DA PÁGINA ---
+st.set_page_config(
+    page_title="Simulador de Eletroforese | Biofármacos", 
+    layout="wide", 
+    page_icon="🧬",
+    initial_sidebar_state="expanded"
+)
+
+# --- CSS PARA O RODAPÉ ---
+st.markdown("""
+<style>
+.footer {
+    position: fixed;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    background-color: #0E1117;
+    color: #FAFAFA;
+    text-align: center;
+    padding: 10px;
+    font-size: 14px;
+    border-top: 1px solid #333;
+    z-index: 100;
+}
+</style>
+""", unsafe_allow_html=True)
 
 # Converte enzimas para string
 TODAS_ENZIMAS = sorted([str(e) for e in CommOnly])
@@ -21,13 +45,10 @@ LADDERS = {
 }
 
 def processar_upload(input_data):
-    """Lê arquivos FASTA (.fasta, .txt) ou SnapGene (.dna)."""
     try:
         nome_arquivo = input_data.name
-        # Remove extensão para usar como nome sugerido
         nome_sugerido = nome_arquivo.rsplit('.', 1)[0]
         
-        # --- CASO 1: Arquivo SnapGene (.dna) ---
         if nome_arquivo.lower().endswith('.dna'):
             try:
                 bytes_io = BytesIO(input_data.getvalue())
@@ -36,7 +57,6 @@ def processar_upload(input_data):
             except Exception as e:
                 return "Erro", f"Erro .dna: {str(e)}"
 
-        # --- CASO 2: Arquivo Texto (FASTA/TXT) ---
         bytes_data = input_data.getvalue()
         try:
             conteudo = bytes_data.decode("utf-8")
@@ -47,12 +67,10 @@ def processar_upload(input_data):
             try:
                 iterator = SeqIO.parse(StringIO(conteudo), "fasta")
                 record = next(iterator)
-                # Usa ID do fasta ou nome do arquivo
                 return record.id if record.id else nome_sugerido, str(record.seq).upper()
             except:
                 pass 
 
-        # Fallback: Texto Cru (Raw)
         linhas = conteudo.splitlines()
         seq_limpa = ""
         for linha in linhas:
@@ -90,7 +108,7 @@ def calcular_digestao(sequencia, enzimas, eh_circular):
     
     if eh_circular and not enzimas:
         return [
-            (tamanho_total * 1.4, "Nicked", tamanho_total),
+            (tamanho_total * 1.4, "Nicked (Relaxed)", tamanho_total),
             (tamanho_total * 0.7, "Supercoiled", tamanho_total)
         ]
     
@@ -123,18 +141,37 @@ def calcular_digestao(sequencia, enzimas, eh_circular):
             
     return [(frag, "Fragmento", frag) for frag in sorted(fragmentos, reverse=True)]
 
-# --- INTERFACE ---
-st.title("🧪 Simulador de Eletroforese Interativo")
+# --- CABEÇALHO ---
+st.title("🧪 Simulador de Eletroforese In Silico")
+st.markdown("**Laboratório de Biofármacos**")
 
+with st.expander("ℹ️ Como Usar e Formatos Aceitos"):
+    st.markdown("""
+    ### 📂 Formatos Aceitos
+    * **SnapGene (.dna):** Arquivos binários nativos.
+    * **FASTA (.fasta, .fa):** Formato padrão.
+    * **Texto:** Sequência crua (ATGC...).
+    
+    ### 🎨 Estilos Visuais
+    * **Neon:** Ladder Laranja, Amostras Verdes (Ideal para apresentações).
+    * **Profissional:** P&B fundo escuro.
+    * **Publicação:** P&B fundo branco.
+    """)
+
+# --- BARRA LATERAL ---
 with st.sidebar:
     st.header("Configurações")
     num_pocos = st.slider("Número de Poços", 1, 15, 3) 
     st.divider()
-    inverter_cores = st.toggle("Inverter Cores", value=False)
     
-    # SUGESTÃO DE OURO: Ajuste da % de Agarose (Muda o Zoom Vertical)
+    # --- SELETOR DE ESTILO ---
+    estilo_gel = st.selectbox(
+        "Estilo Visual", 
+        ["Neon (Verde/Laranja)", "Profissional (Dark P&B)", "Publicação (Light P&B)"]
+    )
+    
     agarose = st.slider("Concentração de Agarose (%)", 0.5, 2.0, 1.0, 0.1)
-    st.caption("Ajustar a agarose altera a faixa de visualização (Zoom vertical).")
+    st.caption("Ajustar a agarose altera o zoom vertical.")
 
 dados_para_plotar = []
 labels_eixo_x = []
@@ -149,8 +186,6 @@ for i in range(num_pocos):
         with st.expander(f"Poço {i+1}", expanded=(i==0)):
             tipo = st.radio(f"Conteúdo {i+1}:", ["Amostra", "Ladder"], key=f"t_{i}", horizontal=True)
             
-            # --- SUGESTÃO IMPLEMENTADA: NOME DO POÇO ---
-            # O padrão é o número, mas você pode mudar para "pUC19", "Clone 1", etc.
             rotulo_padrao = str(i+1)
             
             if tipo == "Ladder":
@@ -158,7 +193,6 @@ for i in range(num_pocos):
                 ladder_data = [(tam, "Ladder", tam) for tam in LADDERS[lad]]
                 dados_para_plotar.append(ladder_data)
                 
-                # Se for ladder, sugerimos "M" ou o nome do ladder
                 rotulo_custom = st.text_input("Nome no Gel:", value="M", key=f"lbl_{i}")
                 labels_eixo_x.append(rotulo_custom)
                 
@@ -186,9 +220,8 @@ for i in range(num_pocos):
                 circ = c1.checkbox("Circular?", True, key=f"c_{i}")
                 enz = c2.multiselect("Enzimas", TODAS_ENZIMAS, key=f"e_{i}")
                 
-                # Usa o nome do arquivo como sugestão de rótulo se disponível
                 val_rotulo = nome_arquivo if nome_arquivo else str(i+1)
-                rotulo_custom = st.text_input("Nome no Gel:", value=val_rotulo[:10], key=f"lbl_{i}")
+                rotulo_custom = st.text_input("Nome no Gel:", value=val_rotulo[:12], key=f"lbl_{i}")
                 labels_eixo_x.append(rotulo_custom)
 
                 info_texto = f"Circular: {circ}<br>Enzimas: {', '.join(enz) if enz else 'Uncut'}"
@@ -206,12 +239,25 @@ for i in range(num_pocos):
 st.divider()
 
 if any(dados_para_plotar):
-    bg_color = 'white' if inverter_cores else '#1e1e1e'
-    line_color = 'black' if inverter_cores else 'white'
-    text_color = 'black' if inverter_cores else 'white'
     
-    # Define limites verticais baseado na agarose (Física aproximada)
-    # 0.7% vê até 20kb. 2.0% vê até 2kb.
+    # --- CONFIGURAÇÃO DE CORES BASEADA NO ESTILO ---
+    if "Neon" in estilo_gel:
+        bg_color = '#1e1e1e'
+        text_color = 'white'
+        color_sample = '#00ff41'  # Verde Matrix/GFP
+        color_ladder = '#ff9900'  # Laranja
+    elif "Profissional" in estilo_gel:
+        bg_color = '#1e1e1e'
+        text_color = 'white'
+        color_sample = 'white'
+        color_ladder = 'white'
+    else: # Publicação (Light)
+        bg_color = 'white'
+        text_color = 'black'
+        color_sample = 'black'
+        color_ladder = 'black'
+
+    # Zoom dinâmico pela agarose
     min_view = 50 + (100 * (agarose - 0.5)) 
     max_view = 25000 / (agarose * 0.8)
 
@@ -221,11 +267,16 @@ if any(dados_para_plotar):
         x_center = i + 1
         eh_ladder = (nomes_ladders[i] is not None)
         
+        # Define a cor desta raia específica
+        if eh_ladder:
+            cor_atual = color_ladder
+        else:
+            cor_atual = color_sample
+
         if lista_bandas:
              massa_total = sum([b[2] for b in lista_bandas]) if not eh_ladder else 1
         
         for (tam_aparente, tipo_banda, tam_real) in lista_bandas:
-            # Filtra bandas fora do alcance visual da agarose
             if tam_aparente < min_view or tam_aparente > max_view: continue
 
             width = 2; opacity = 0.8
@@ -235,7 +286,7 @@ if any(dados_para_plotar):
                 else: width = 3; opacity = 0.7
             else:
                 if tipo_banda == "Supercoiled": fracao = 0.7
-                elif tipo_banda == "Nicked": fracao = 0.3
+                elif tipo_banda == "Nicked (Relaxed)": fracao = 0.3
                 else: fracao = tam_real / massa_total if massa_total > 0 else 0.5
                 width = 3 + (8 * fracao)
                 opacity = 0.6 + (0.4 * fracao)
@@ -246,8 +297,8 @@ if any(dados_para_plotar):
                 x=[x_center - largura_banda, x_center + largura_banda],
                 y=[tam_aparente, tam_aparente],
                 mode='lines+markers',
-                line=dict(color=line_color, width=width),
-                marker=dict(color=line_color, size=width, symbol='circle'),
+                line=dict(color=cor_atual, width=width),
+                marker=dict(color=cor_atual, size=width, symbol='circle'),
                 opacity=opacity,
                 showlegend=False,
                 hoverinfo='text',
@@ -262,8 +313,8 @@ if any(dados_para_plotar):
                     showlegend=False, hoverinfo='skip'
                 ))
 
-    # --- LAYOUT FINAL ---
-    LARGURA_MINIMA = 12
+    # Layout Fixo (Pente de 15 poços)
+    LARGURA_MINIMA = 15
     max_range = max(num_pocos, LARGURA_MINIMA) + 0.5
 
     fig.update_layout(
@@ -271,13 +322,13 @@ if any(dados_para_plotar):
         height=700, margin=dict(t=40, b=40, l=40, r=40),
         xaxis=dict(
             tickmode='array', tickvals=list(range(1, num_pocos + 1)),
-            ticktext=labels_eixo_x, # AGORA USA SEUS NOMES PERSONALIZADOS
+            ticktext=labels_eixo_x,
             tickfont=dict(color=text_color, size=14, family='Arial Black'),
             showgrid=False, zeroline=False, range=[0.2, max_range] 
         ),
         yaxis=dict(
             type='log',
-            range=[math.log10(min_view), math.log10(max_view)], # Zoom dinâmico pela agarose
+            range=[math.log10(min_view), math.log10(max_view)],
             showgrid=False, zeroline=False, showticklabels=False
         )
     )
@@ -287,3 +338,11 @@ if any(dados_para_plotar):
 
 else:
     st.info("Adicione amostras para gerar o gel.")
+
+# --- RODAPÉ FIXO ---
+st.markdown("""
+<div class="footer">
+    <p><b>Elton Ostetti</b> | Laboratório de Biofármacos - Instituto Butantan</p>
+    <p style="font-size: 11px; color: #888;">Desenvolvido para auxiliar pesquisas em clonagem molecular.</p>
+</div>
+""", unsafe_allow_html=True)
