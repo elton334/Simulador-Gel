@@ -9,7 +9,7 @@ from Bio import SeqIO
 # --- CONFIGURAÇÃO INICIAL ---
 st.set_page_config(page_title="Simulador de Gel Interativo", layout="wide", page_icon="🧬")
 
-# Converte enzimas para string para evitar erros
+# Converte enzimas para string
 TODAS_ENZIMAS = sorted([str(e) for e in CommOnly])
 
 # Dados de Ladders
@@ -148,43 +148,43 @@ if any(dados_para_plotar):
         massa_total = sum(bandas) if bandas and not eh_ladder else 1
         
         for tam in bandas:
-            # --- ESTÉTICA ---
+            # --- ESTÉTICA (Espessura) ---
             width = 2
             opacity = 0.8
             
             if eh_ladder:
-                # Ladder: Bandas de referência mais fortes
                 if tam in [3000, 1000, 500]: 
-                    width = 4
+                    width = 7 # Aumentei um pouco para ficar mais visível o arredondado
                     opacity = 1.0
                 elif tam >= 5000:
-                    width = 3
+                    width = 5
                     opacity = 0.9
                 else:
-                    width = 1.5
+                    width = 3
                     opacity = 0.7
             else:
-                # Amostra: Massa proporcional
                 fracao_massa = tam / massa_total
-                width = 2 + (6 * fracao_massa) 
-                opacity = 0.5 + (0.5 * fracao_massa)
+                # Ajuste fino na espessura para o novo modo arredondado
+                width = 3 + (8 * fracao_massa) 
+                opacity = 0.6 + (0.4 * fracao_massa)
 
-            # --- DESENHAR BANDA ---
+            # --- DESENHAR BANDA (AGORA COM BORDAS ARREDONDADAS) ---
             fig.add_trace(go.Scatter(
                 x=[x_center - 0.35, x_center + 0.35],
                 y=[tam, tam],
-                mode='lines',
+                # O TRUQUE: Usar 'lines+markers' adiciona círculos nas pontas
+                mode='lines+markers', 
                 line=dict(color=line_color, width=width),
+                # O marcador tem a mesma cor e tamanho da linha, criando o efeito redondo
+                marker=dict(color=line_color, size=width, symbol='circle'),
                 opacity=opacity,
                 showlegend=False,
                 hoverinfo='text',
                 hovertext=f"<b>{tam} pb</b><br>{labels_eixo_x[i]}<br>{detalhes_hover[i]}"
             ))
 
-            # --- RÓTULOS DO LADDER (NOVA ESTRATÉGIA) ---
+            # --- RÓTULOS DO LADDER ---
             if eh_ladder:
-                # Adiciona um ponto de texto invisível (mode='text')
-                # Isso garante que o texto apareça independente da margem
                 fig.add_trace(go.Scatter(
                     x=[x_center - 0.5], 
                     y=[tam],
@@ -210,20 +210,18 @@ if any(dados_para_plotar):
             tickfont=dict(color=text_color, size=14, family='Arial Black'),
             showgrid=False,
             zeroline=False,
-            # Inicia em 0.2 para dar espaço aos números do ladder da esquerda
             range=[0.2, num_pocos + 0.8] 
         ),
         
         yaxis=dict(
             type='log',
-            # ORDEM CORRETA: [log(Min), log(Max)] = [Baixo, Cima]
-            # Como queremos 80 embaixo e 20000 em cima, usamos a ordem crescente padrão.
+            # ORDEM CORRETA: [log(Baixo), log(Cima)]
             range=[math.log10(80), math.log10(20000)],
             showgrid=False,
             zeroline=False,
             title=dict(text="Tamanho (pb)", font=dict(color=text_color, size=14)),
             tickfont=dict(color=text_color),
-            showticklabels=False # Oculta eixo Y padrão (já temos os ladders)
+            showticklabels=False
         )
     )
 
