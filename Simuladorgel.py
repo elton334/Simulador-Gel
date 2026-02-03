@@ -6,14 +6,12 @@ from io import StringIO
 from Bio import SeqIO
 
 # --- CONFIGURAÇÃO INICIAL ---
-st.set_page_config(page_title="Simulador de Gel (Massa Proporcional)", layout="wide", page_icon="🧬")
+st.set_page_config(page_title="Simulador de Gel Corrigido", layout="wide", page_icon="🧬")
 
 # Carrega TODAS as enzimas comerciais
 TODAS_ENZIMAS = sorted(list(CommOnly))
 
 # Dados de Ladders (Marcadores)
-# Nota: O 1kb Plus oficial da Invitrogen geralmente vai de 100bp a 12000bp.
-# As bandas de referência (mais fortes) costumam ser 1000, 1650 (as vezes) e 3000.
 LADDERS = {
     "1kb Plus DNA Ladder": [100, 200, 300, 400, 500, 650, 850, 1000, 1650, 2000, 3000, 4000, 5000, 6000, 8000, 10000, 12000],
     "1kb DNA Ladder (Genérico)": [250, 500, 750, 1000, 1500, 2000, 2500, 3000, 4000, 5000, 6000, 8000, 10000],
@@ -162,7 +160,6 @@ if any(dados_para_plotar):
             
             if eh_ladder:
                 # Lógica para Ladders (Bandas de Referência Fixas)
-                # 1kb Plus e Generico costumam ter 3000 e 1000 fortes
                 if tam in [3000, 1000, 500]: 
                     lw = 4.0
                     alpha = 1.0
@@ -173,29 +170,23 @@ if any(dados_para_plotar):
                     lw = 1.5
                     alpha = 0.7
             else:
-                # LÓGICA DE AMOSTRA (Baseada na Massa)
-                # Fração da massa total que este fragmento representa
+                # LÓGICA DE AMOSTRA (Massa Proporcional)
                 fracao_massa = tam / massa_total
-                
-                # O fragmento maior brilha mais. 
-                # Base minima 1.0, Maximo adiciona até 4.0
                 lw = 1.5 + (4.5 * fracao_massa) 
-                
-                # A transparência também ajuda no efeito visual
-                # Fragmentos muito pequenos ficam mais "fantasmas"
                 alpha = 0.6 + (0.4 * fracao_massa)
 
             ax.hlines(y=tam, xmin=x-0.35, xmax=x+0.35, colors=band_color, linewidth=lw, alpha=alpha)
             
-            # Rótulos do Ladder (Apenas numeros inteiros "pb")
+            # Rótulos do Ladder
             if eh_ladder:
                 ax.text(x-0.5, tam, f"{tam}", color=text_color, fontsize=8, ha='right', va='center')
-                # Linha guia fina
                 ax.hlines(y=tam, xmin=x-0.5, xmax=x-0.35, colors=text_color, linewidth=0.5, alpha=0.3)
 
     # Eixos
     ax.set_yscale('log')
-    ax.set_ylim(15000, 80) # De 80bp a 15kb
+    # AQUI ESTAVA O ERRO: Inverti a ordem para (menor, maior)
+    # No plot logarítmico padrão, menor fica em baixo, maior em cima.
+    ax.set_ylim(80, 20000) 
     
     ax.set_xticks(range(1, num_pocos + 1))
     ax.set_xticklabels(labels_eixo_x, color=text_color, fontsize=11, weight='bold')
