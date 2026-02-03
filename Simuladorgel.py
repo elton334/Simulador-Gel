@@ -3,7 +3,7 @@ import plotly.graph_objects as go
 import math
 from Bio.Seq import Seq
 from Bio.Restriction import RestrictionBatch, Analysis, CommOnly
-from io import StringIO
+from io import StringIO, BytesIO
 from Bio import SeqIO
 
 # --- CONFIGURAÇÃO INICIAL ---
@@ -20,53 +20,101 @@ LADDERS = {
     "High Mass": [1000, 2000, 3000, 4000, 5000, 6000, 8000, 10000, 20000, 48500]
 }
 
-def processar_fasta(input_data, is_file=False):
+def processar_upload(input_data):
+    """
+    Lê arquivos FASTA (.fasta, .txt) ou SnapGene (.dna).
+    Retorna: (Nome, Sequencia)
+    """
     try:
-        if is_file:
-            stringio = StringIO(input_data.getvalue().decode("utf-8"))
-            iterator = SeqIO.parse(stringio, "fasta")
-        else:
-            if ">" in input_data:
-                from io import StringIO
-                iterator = SeqIO.parse(StringIO(input_data), "fasta")
-            else:
-                return "Seq Manual", "".join(input_data.split()).upper()
+        nome_arquivo = input_data.name.lower()
         
-        record = next(iterator)
-        return record.id, str(record.seq).upper()
-    except Exception:
+        # --- CASO 1: Arquivo SnapGene (.dna) ---
+        if nome_arquivo.endswith('.dna'):
+            try:
+                # SnapGene é binário, usamos BytesIO
+                # Requer 'pip install construct'
+                bytes_io = BytesIO(input_data.getvalue())
+                record = SeqIO.read(bytes_io, "snapgene")
+                return record.id, str(record.seq).upper()
+            except Exception as e:
+                return "Erro", f"Erro ao ler .dna (Instalou 'construct'?): {str(e)}"
+
+        # --- CASO 2: Arquivo Texto (FASTA/TXT) ---
+        # Decodifica bytes para string
+        bytes_data = input_data.getvalue()
+        try:
+            conteudo = bytes_data.decode("utf-8")
+        except UnicodeDecodeError:
+            conteudo = bytes_data.decode("latin-1")
+
+        # Tenta parsear como FASTA
+        if ">" in conteudo:
+            try:
+                iterator = SeqIO.parse(StringIO(conteudo), "fasta")
+                record = next(iterator)
+                return record.id, str(record.seq).upper()
+            except:
+                pass 
+
+        # Fallback: Texto Cru (Raw)
+        linhas = conteudo.splitlines()
+        seq_limpa = ""
+        for linha in linhas:
+            linha = linha.strip()
+            if not linha or linha.startswith(">") or linha.startswith(";"): continue
+            seq_limpa += linha
+        
+        seq_final = "".join(seq_limpa.split()).upper()
+        
+        # Validação básica de DNA
+        if any(c not in "ATGCNRYKMSWBDHV" for c in seq_final[:100]): # Checa os primeiros 100 chars
+             return "Erro", "Arquivo não parece conter sequência de DNA válida."
+
+        return input_data.name, seq_final
+
+    except Exception as e:
+        return "Erro", str(e)
+
+def processar_texto_manual(texto):
+    """Processa texto colado manualmente."""
+    try:
+        if ">" in texto:
+            iterator = SeqIO.parse(StringIO(texto), "fasta")
+            record = next(iterator)
+            return record.id, str(record.seq).upper()
+        else:
+            return "Seq Manual", "".join(texto.split()).upper()
+    except:
         return "Erro", ""
 
 def calcular_digestao(sequencia, enzimas, eh_circular):
+    if not sequencia or sequencia.startswith("Erro"): return []
+    
+    # Limpeza de caracteres não-DNA
+    sequencia = "".join([c for c in sequencia if c in "ATGCMRWSYKVHDBN"])
     if not sequencia: return []
+
     seq_obj = Seq(sequencia)
     tamanho_total = len(seq_obj)
     
-    # CASO ESPECIAL: Plasmídeo Circular Não Cortado (Uncut)
+    # CASO: Plasmídeo Uncut
     if eh_circular and not enzimas:
-        # Simulação de migração anômala
-        # Supercoiled: Corre mais rápido (aprox 0.7x do tamanho linear)
-        # Nicked/Relaxed: Corre mais devagar (aprox 1.4x do tamanho linear)
-        
-        # Retorna lista de tuplas: (Tamanho Aparente, Tipo, Tamanho Real)
         return [
             (tamanho_total * 1.4, "Nicked (Relaxed)", tamanho_total),
             (tamanho_total * 0.7, "Supercoiled", tamanho_total)
         ]
     
     if not enzimas: 
-        # Linear não cortado
         return [(tamanho_total, "Linear", tamanho_total)]
     
-    # Digestão Normal
     rb = RestrictionBatch(enzimas)
     analise = Analysis(rb, seq_obj, linear=not eh_circular)
     cortes = analise.full()
     locais = sorted(list(set([local for lista in cortes.values() for local in lista])))
     
     if not locais: 
-        # Enzima não cortou (site ausente)
-        return [(tamanho_total, "Circular (Não Cortado - Sítio Ausente)", tamanho_total)] if eh_circular else [(tamanho_total, "Linear (Não Cortado)", tamanho_total)]
+        tipo = "Circular (Sítio Ausente)" if eh_circular else "Linear (Não Cortado)"
+        return [(tamanho_total, tipo, tamanho_total)]
         
     fragmentos = []
     if not eh_circular:
@@ -77,18 +125,17 @@ def calcular_digestao(sequencia, enzimas, eh_circular):
         fragmentos.append(tamanho_total - prev)
     else:
         if len(locais) == 1:
-            fragmentos.append(tamanho_total) # Linearizou
+            fragmentos.append(tamanho_total)
         else:
             for i in range(len(locais)-1):
                 fragmentos.append(locais[i+1] - locais[i])
             fragmentos.append((tamanho_total - locais[-1]) + locais[0])
             
-    # Formata saida padrão para digestão: (Tamanho, Tipo, Real)
     return [(frag, "Fragmento", frag) for frag in sorted(fragmentos, reverse=True)]
 
 # --- INTERFACE ---
 st.title("🧪 Simulador de Eletroforese Interativo")
-st.markdown("Passe o mouse sobre as bandas para ver detalhes.")
+st.markdown("Suporte para: **.dna (SnapGene)**, **.fasta** e **.txt**.")
 
 with st.sidebar:
     st.header("Configurações")
@@ -112,7 +159,6 @@ for i in range(num_pocos):
             
             if tipo == "Ladder":
                 lad = st.selectbox("Ladder:", list(LADDERS.keys()), key=f"l_{i}")
-                # Padroniza ladder para o formato (Tamanho, Tipo, Real)
                 ladder_data = [(tam, "Ladder", tam) for tam in LADDERS[lad]]
                 dados_para_plotar.append(ladder_data)
                 labels_eixo_x.append("M")
@@ -120,16 +166,20 @@ for i in range(num_pocos):
                 detalhes_hover.append(lad)
             else:
                 nomes_ladders.append(None)
-                tab_f, tab_t = st.tabs(["Arquivo", "Texto"])
+                tab_f, tab_t = st.tabs(["Arquivo (.dna/.fasta)", "Texto"])
                 seq, nome = "", f"{i+1}"
                 
                 with tab_f:
-                    up = st.file_uploader("FASTA", key=f"u_{i}")
-                    if up: nome, seq = processar_fasta(up, True)
+                    up = st.file_uploader("Arquivo", type=['dna', 'fasta', 'txt', 'fa'], key=f"u_{i}")
+                    if up: 
+                        nome, seq = processar_upload(up)
+                        if nome == "Erro": 
+                            st.error(seq) # Mostra mensagem de erro detalhada
+                            seq = ""
                 with tab_t:
-                    txt = st.text_area("Seq", height=70, key=f"tx_{i}")
+                    txt = st.text_area("Colar Sequência", height=70, key=f"tx_{i}")
                     if txt and not seq: 
-                        nome_t, seq_t = processar_fasta(txt, False)
+                        nome_t, seq_t = processar_texto_manual(txt)
                         if nome_t != "Seq Manual": nome = nome_t
                         seq = seq_t
                 
@@ -137,16 +187,15 @@ for i in range(num_pocos):
                 circ = c1.checkbox("Circular?", True, key=f"c_{i}")
                 enz = c2.multiselect("Enzimas", TODAS_ENZIMAS, key=f"e_{i}")
                 
-                info_texto = f"Circular: {circ}<br>Enzimas: {', '.join(enz) if enz else 'Nenhuma (Uncut)'}"
+                info_texto = f"Circular: {circ}<br>Enzimas: {', '.join(enz) if enz else 'Uncut'}"
                 detalhes_hover.append(info_texto)
 
                 if seq:
                     try:
-                        # Agora retorna tuplas (Tamanho Aparente, Tipo, Tamanho Real)
                         res = calcular_digestao(seq, enz, circ)
                         dados_para_plotar.append(res)
                         labels_eixo_x.append(str(i+1))
-                    except:
+                    except Exception as e:
                         dados_para_plotar.append([])
                         labels_eixo_x.append("Erro")
                 else:
@@ -166,14 +215,11 @@ if any(dados_para_plotar):
         x_center = i + 1
         eh_ladder = (labels_eixo_x[i] == "M")
         
-        # Calcula massa total SOMENTE dos fragmentos reais para proporção
-        # Se for uncut (plasmídeo inteiro), a massa total é o tamanho do plasmídeo (aparece 2x mas a massa é dividida)
-        # Para simplificar visualização: usamos o tamanho real da maior banda como referência de massa
         if lista_bandas:
              massa_total = sum([b[2] for b in lista_bandas]) if not eh_ladder else 1
         
         for (tam_aparente, tipo_banda, tam_real) in lista_bandas:
-            # --- ESTÉTICA ---
+            # --- VISUAL (Mantido das versões anteriores) ---
             width = 2
             opacity = 0.8
             
@@ -185,19 +231,17 @@ if any(dados_para_plotar):
                 else:
                     width = 3; opacity = 0.7
             else:
-                # Se for plasmídeo uncut, as bandas Supercoiled e Nicked dividem a massa
-                # Mas visualmente, Supercoiled costuma ser mais forte e nítida.
                 if tipo_banda == "Supercoiled":
-                    fracao = 0.7 # Supercoiled brilha mais pois é compacta
+                    fracao = 0.7
                 elif tipo_banda == "Nicked (Relaxed)":
-                    fracao = 0.3 # Nicked é mais difusa
+                    fracao = 0.3
                 else:
                     fracao = tam_real / massa_total if massa_total > 0 else 0.5
                 
                 width = 3 + (8 * fracao)
                 opacity = 0.6 + (0.4 * fracao)
 
-            # --- DESENHO DA BANDA ---
+            # --- DESENHO COM BORDAS ARREDONDADAS ---
             fig.add_trace(go.Scatter(
                 x=[x_center - 0.35, x_center + 0.35],
                 y=[tam_aparente, tam_aparente],
@@ -207,11 +251,9 @@ if any(dados_para_plotar):
                 opacity=opacity,
                 showlegend=False,
                 hoverinfo='text',
-                # Tooltip Educativo: Mostra o tamanho aparente E o real
                 hovertext=f"<b>Aparente: ~{int(tam_aparente)} pb</b><br>Real: {tam_real} pb<br>Tipo: {tipo_banda}<br>Poço: {labels_eixo_x[i]}"
             ))
 
-            # --- RÓTULOS DO LADDER ---
             if eh_ladder:
                 fig.add_trace(go.Scatter(
                     x=[x_center - 0.5], 
@@ -248,4 +290,4 @@ if any(dados_para_plotar):
     st.plotly_chart(fig, use_container_width=True)
 
 else:
-    st.info("Adicione amostras para gerar o gel.")
+    st.info("Adicione amostras (.dna ou .fasta) para gerar o gel.")
