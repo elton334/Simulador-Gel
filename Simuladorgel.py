@@ -7,29 +7,104 @@ from Bio.Restriction import RestrictionBatch, Analysis, CommOnly
 from io import StringIO, BytesIO
 from Bio import SeqIO
 
-# --- CONFIGURAÇÃO INICIAL DA PÁGINA ---
+# --- 1. CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(
-    page_title="Simulador de Digestão de DNA e Eletroforese", # Título da aba limpo
+    page_title="BioLab Studio", 
     layout="wide", 
     page_icon="🧬",
     initial_sidebar_state="expanded"
 )
 
-# --- CSS PARA ESTILOS DISCRETOS ---
+# --- 2. ESTÉTICA BOHRIUM (CSS HACK) ---
+# Este bloco transforma o visual padrão do Streamlit no visual "SaaS Moderno"
 st.markdown("""
 <style>
-.footer {
-    width: 100%;
-    text-align: center;
-    padding-top: 30px;
-    padding-bottom: 20px;
-    font-size: 12px;
-    color: #666;
-    border-top: 1px solid #333;
-    margin-top: 50px;
-}
+    /* Importar fonte Inter (Padrão moderno) */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+
+    /* Fundo Geral com Degradê Suave */
+    .stApp {
+        background: linear-gradient(180deg, #F5F7F9 0%, #FFFFFF 100%);
+        font-family: 'Inter', sans-serif;
+    }
+
+    /* Sidebar - Branco Puro e Clean */
+    section[data-testid="stSidebar"] {
+        background-color: #FFFFFF;
+        border-right: 1px solid #E5E7EB;
+        box-shadow: 4px 0 15px rgba(0,0,0,0.02);
+    }
+    
+    /* Títulos e Textos */
+    h1, h2, h3 {
+        color: #111827 !important;
+        font-weight: 700 !important;
+        letter-spacing: -0.025em;
+    }
+    p, label {
+        color: #374151;
+    }
+
+    /* Transformar os Expanders em "Cards" Flutuantes */
+    .stExpander {
+        background-color: #FFFFFF;
+        border-radius: 12px !important;
+        border: 1px solid #E5E7EB !important;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03) !important;
+        margin-bottom: 1rem;
+        transition: all 0.2s ease-in-out;
+    }
+    
+    .stExpander:hover {
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08) !important;
+        border-color: #4F46E5 !important; /* Destaque Roxo ao passar o mouse */
+    }
+
+    /* Conteúdo interno do Expander */
+    div[data-testid="stExpanderDetails"] {
+        background-color: #FFFFFF;
+        border-radius: 0 0 12px 12px;
+    }
+
+    /* Botões Modernos */
+    .stButton > button {
+        background-color: #4F46E5; /* Roxo Bohrium */
+        color: white;
+        border-radius: 8px;
+        font-weight: 600;
+        border: none;
+        padding: 0.5rem 1rem;
+        transition: background-color 0.2s;
+    }
+    .stButton > button:hover {
+        background-color: #4338CA;
+        color: white;
+    }
+
+    /* Inputs e Selectboxes */
+    .stTextInput > div > div > input, .stSelectbox > div > div > div {
+        background-color: #F9FAFB;
+        border-radius: 8px;
+        border: 1px solid #D1D5DB;
+        color: #111827;
+    }
+    
+    /* Rodapé */
+    .footer {
+        width: 100%;
+        text-align: center;
+        padding-top: 30px;
+        padding-bottom: 20px;
+        font-size: 12px;
+        color: #9CA3AF;
+        border-top: 1px solid #E5E7EB;
+        margin-top: 50px;
+    }
 </style>
 """, unsafe_allow_html=True)
+
+
+# --- 3. LÓGICA DO SISTEMA (MANTIDA IGUAL) ---
 
 # Converte enzimas para string
 TODAS_ENZIMAS = sorted([str(e) for e in CommOnly])
@@ -139,51 +214,48 @@ def calcular_digestao(sequencia, enzimas, eh_circular):
             
     return [(frag, "Fragmento", frag) for frag in sorted(fragmentos, reverse=True)]
 
-# --- BARRA LATERAL ---
+# --- BARRA LATERAL (VISUAL CLEAN) ---
 with st.sidebar:
-    st.header("Configurações")
+    st.title("🧬 **BioLab**") # Título mais clean
+    st.markdown("---")
+    
+    st.caption("CONFIGURAÇÕES GERAIS")
     
     # 1. Número de Poços
     num_pocos = st.slider("Número de Poços", 1, 15, 3) 
-    st.divider()
     
     # 2. Concentração de Agarose
-    agarose = st.slider("Concentração de Agarose (%)", 0.5, 2.0, 1.0, 0.1)
-    st.caption("Ajustar a agarose altera o zoom vertical.")
+    agarose = st.slider("Agarose (%)", 0.5, 2.0, 1.0, 0.1)
     
-    st.divider()
-
+    st.caption("VISUALIZAÇÃO")
     # 3. Estilo Visual
     estilo_gel = st.selectbox(
-        "Estilo Visual", 
-        ["Profissional (Dark P&B)", "Publicação (Light P&B)", "Neon (Verde/Laranja)"]
+        "Tema do Gel", 
+        ["Neon (Verde/Laranja)", "Profissional (Dark P&B)", "Publicação (Light P&B)"]
     )
     
-    st.divider()
+    st.markdown("---")
     
     # --- GUIA DE USO ---
-    with st.expander("❓ Guia de Uso & Formatos"):
+    with st.expander("❓ Guia Rápido"):
         st.markdown("""
-        ### 📂 Formatos Aceitos
-        * **SnapGene (.dna):** Arquivos binários nativos.
-        * **FASTA (.fasta, .fa):** Formato padrão.
-        * **Texto (.txt):** Sequência crua (ATGC...).
-        
-        ### ⚙️ Como Usar
-        1. **Configurar:** Defina o número de poços e a % de agarose.
-        2. **Preencher:** Escolha se o poço é *Amostra* ou *Ladder*.
-        3. **Detalhes:** * Arraste o arquivo.
-           * Se for Plasmídeo, marque **Circular**.
-           * Selecione as **Enzimas**.
-        4. **Rotular:** Use o campo "Nome da Amostra".
-        
-        ### 💡 Dicas
-        * **Plasmídeos:** Se não selecionar enzimas, o simulador mostra as formas *Supercoiled* e *Nicked*.
-        * **Relatório:** Baixe a tabela de fragmentos no final da página.
+        **1. Setup:** Ajuste poços e agarose.
+        **2. Amostras:**
+        * Faça upload de `.dna` ou `.fasta`.
+        * Para plasmídeos, marque **Circular**.
+        * Escolha as enzimas.
+        **3. Resultado:** O gel é gerado automaticamente.
         """)
+        
+    st.markdown(" ")
+    st.markdown("**Versão 2.1 (Bohrium UI)**")
 
 # --- CONTEÚDO PRINCIPAL ---
-st.title("🧪 Simulador de Eletroforese In Silico")
+
+# Cabeçalho Moderno
+st.markdown("# Simulador de Eletroforese")
+st.markdown("Configure suas amostras abaixo para visualizar o gel in silico.")
+st.markdown(" ") # Espaço extra
 
 # Estrutura para guardar dados para o relatório
 relatorio_dados = []
@@ -193,20 +265,22 @@ nomes_ladders = []
 
 cols = st.columns(2)
 
+# LOOP DOS POÇOS (Agora estilizados como Cards pelo CSS)
 for i in range(num_pocos):
     col_atual = cols[i % 2]
     with col_atual:
-        with st.expander(f"Poço {i+1}", expanded=(i==0)):
-            tipo = st.radio(f"Conteúdo {i+1}:", ["Amostra", "Ladder"], key=f"t_{i}", horizontal=True)
+        # O st.expander agora parece um "Card" branco flutuante
+        with st.expander(f"🔹 Poço {i+1}", expanded=(i==0)):
+            tipo = st.radio(f"Conteúdo {i+1}:", ["Amostra", "Ladder"], key=f"t_{i}", horizontal=True, label_visibility="collapsed")
             
             rotulo_padrao = str(i+1)
             
             if tipo == "Ladder":
-                lad = st.selectbox("Ladder:", list(LADDERS.keys()), key=f"l_{i}")
+                lad = st.selectbox("Selecione o Ladder:", list(LADDERS.keys()), key=f"l_{i}")
                 ladder_data = [(tam, "Ladder", tam) for tam in LADDERS[lad]]
                 dados_para_plotar.append(ladder_data)
                 
-                rotulo_custom = st.text_input("Nome da Amostra:", value="M", key=f"lbl_{i}")
+                rotulo_custom = st.text_input("Rótulo no Gel:", value="M", key=f"lbl_{i}")
                 labels_eixo_x.append(rotulo_custom)
                 nomes_ladders.append(lad)
                 
@@ -220,11 +294,11 @@ for i in range(num_pocos):
                 })
             else:
                 nomes_ladders.append(None)
-                tab_f, tab_t = st.tabs(["Arquivo", "Texto"])
+                tab_f, tab_t = st.tabs(["📂 Arquivo", "📝 Texto Manual"])
                 seq, nome_arquivo = "", ""
                 
                 with tab_f:
-                    up = st.file_uploader("Arquivo", type=['dna', 'fasta', 'txt', 'fa'], key=f"u_{i}")
+                    up = st.file_uploader("Upload DNA/Fasta", type=['dna', 'fasta', 'txt', 'fa'], key=f"u_{i}")
                     if up: 
                         nome_arquivo, seq = processar_upload(up)
                         if nome_arquivo == "Erro": 
@@ -236,12 +310,13 @@ for i in range(num_pocos):
                         if nome_t != "Seq Manual": nome_arquivo = nome_t
                         seq = seq_t
                 
-                c1, c2 = st.columns(2)
+                st.markdown("---")
+                c1, c2 = st.columns([1, 2])
                 circ = c1.checkbox("Circular?", True, key=f"c_{i}")
-                enz = c2.multiselect("Enzimas", TODAS_ENZIMAS, key=f"e_{i}")
+                enz = c2.multiselect("Enzimas de Restrição", TODAS_ENZIMAS, key=f"e_{i}")
                 
                 val_rotulo = nome_arquivo if nome_arquivo else str(i+1)
-                rotulo_custom = st.text_input("Nome da Amostra:", value=val_rotulo[:12], key=f"lbl_{i}")
+                rotulo_custom = st.text_input("Rótulo no Gel:", value=val_rotulo[:12], key=f"lbl_{i}")
                 labels_eixo_x.append(rotulo_custom)
 
                 if seq:
@@ -272,15 +347,16 @@ for i in range(num_pocos):
                         "Bandas (pb)": "-"
                     })
 
-st.divider()
+st.markdown(" ") # Espaço antes do gel
+st.markdown("### Resultado da Eletroforese")
 
 if any(dados_para_plotar):
     
-    # Cores
+    # Configuração de Cores do Gráfico
     if "Neon" in estilo_gel:
-        bg_color = '#1e1e1e'; text_color = 'white'; color_sample = '#00ff41'; color_ladder = '#ff9900'
+        bg_color = '#111827'; text_color = 'white'; color_sample = '#00ff41'; color_ladder = '#ff9900' # Neon otimizado
     elif "Profissional" in estilo_gel:
-        bg_color = '#1e1e1e'; text_color = 'white'; color_sample = 'white'; color_ladder = 'white'
+        bg_color = '#000000'; text_color = 'white'; color_sample = 'white'; color_ladder = 'white'
     else: 
         bg_color = 'white'; text_color = 'black'; color_sample = 'black'; color_ladder = 'black'
 
@@ -352,11 +428,11 @@ if any(dados_para_plotar):
         )
     )
     
-    fig.add_annotation(x=-0.05, y=1, xref="paper", yref="paper", text="pb", showarrow=False, font=dict(color=text_color, size=14, family="Arial Black"))
+    # Container visual para o gráfico ficar bonito no tema branco
     st.plotly_chart(fig, use_container_width=True)
     
     # --- BOTÃO DISCRETO DE EXPORTAÇÃO ---
-    with st.expander("📥 Exportar Dados"):
+    with st.expander("📥 Exportar Dados do Relatório"):
         df_resultados = pd.DataFrame(relatorio_dados)
         csv = df_resultados.to_csv(index=False).encode('utf-8')
         st.download_button(
@@ -367,12 +443,13 @@ if any(dados_para_plotar):
         )
 
 else:
-    st.info("Adicione amostras para gerar o gel.")
+    # Card de aviso vazio bonito
+    st.info("👋 Para começar, adicione amostras nos cartões acima.")
 
-# --- RODAPÉ DISCRETO ---
+# --- RODAPÉ ---
 st.markdown("""
 <div class="footer">
-    <p><b>Elton Ostetti</b> | Laboratório de Biofármacos - Instituto Butantan</p>
-    <p>Desenvolvido para auxiliar pesquisas em clonagem molecular.</p>
+    <p><b>BioLab</b> | Instituto Butantan</p>
+    <p>Ferramenta desenvolvida por Elton Ostetti</p>
 </div>
 """, unsafe_allow_html=True)
