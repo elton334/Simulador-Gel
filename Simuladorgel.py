@@ -176,11 +176,6 @@ def calcular_digestao(sequencia, enzimas, eh_circular):
     return [(frag, "Fragmento", frag) for frag in sorted(fragmentos, reverse=True)]
 
 def smart_pcr_search(template, fwd_raw, rev_raw, eh_circular):
-    """
-    Tenta encontrar os primers considerando:
-    1. Overhangs (busca apenas 12pb da ponta 3')
-    2. Orientação Reverse (testa se input é 5'-3' ou 3'-5')
-    """
     fwd = clean_sequence(fwd_raw)
     rev = clean_sequence(rev_raw)
     template = template.upper()
@@ -190,51 +185,38 @@ def smart_pcr_search(template, fwd_raw, rev_raw, eh_circular):
 
     SEED = 12
     
-    # 1. Busca FORWARD (Sempre 5'->3' Sense)
-    # Semente é o final da string
+    # Busca FORWARD (5'->3')
     fwd_seed = fwd[-SEED:]
     fwd_matches = [m.start() for m in re.finditer(fwd_seed, template)]
     if fwd_matches: diag['fwd_found'] = True
     
-    # 2. Busca REVERSE (Inteligente)
+    # Busca REVERSE (Inteligente)
     rev_matches = []
     
-    # Hipótese A: Input é padrão (5'->3'). 3' está no fim.
-    # Pareia com Sense via Reverso Complemento.
-    rev_seed_std = rev[-SEED:] # Pega o fim
+    # Hipótese A: Input 5'->3' (padrão)
+    rev_seed_std = rev[-SEED:]
     rev_rc_std = str(Seq(rev_seed_std).reverse_complement())
     matches_std = [m.start() for m in re.finditer(rev_rc_std, template)]
     
-    # Hipótese B: Input é visual (3'->5'). 3' está no começo.
-    # Pareia com Sense via Complemento (inverso).
-    rev_seed_inv = rev[:SEED] # Pega o começo
+    # Hipótese B: Input 3'->5' (visual)
+    rev_seed_inv = rev[:SEED]
     rev_compl_inv = str(Seq(rev_seed_inv).complement())
     matches_inv = [m.start() for m in re.finditer(rev_compl_inv, template)]
     
-    # Decisão de qual usar (prioriza o que acha matches)
-    if len(matches_inv) > 0:
-        rev_matches = matches_inv
-    elif len(matches_std) > 0:
-        rev_matches = matches_std
+    if len(matches_inv) > 0: rev_matches = matches_inv
+    elif len(matches_std) > 0: rev_matches = matches_std
         
     if rev_matches: diag['rev_found'] = True
     
     produtos = []
     
-    # 3. Calcular Produtos
     for f_pos in fwd_matches:
-        f_end = f_pos + len(fwd_seed) # Onde termina o anelamento do Fwd no template
-        
+        f_end = f_pos + len(fwd_seed)
         for r_pos in rev_matches:
-            # Onde começa o anelamento do Rev no template (que corresponde ao 3' do primer)
-            
-            # Linear (Fwd ... Rev)
             if r_pos > f_pos:
                 dist = r_pos - f_end
                 if dist >= 0:
                     produtos.append(len(fwd) + len(rev) + dist)
-            
-            # Circular
             elif eh_circular and r_pos < f_pos:
                 dist = (len(template) - f_end) + r_pos
                 produtos.append(len(fwd) + len(rev) + dist)
@@ -320,7 +302,6 @@ for i in range(num_pocos):
                         res, diag = smart_pcr_search(seq, fwd, rev, c)
                         plot_data.append(res)
                         
-                        # Diagnóstico Visual
                         if not diag['fwd_found']: st.markdown(f"<p class='error-text'>{TEXTS['diag_fwd_fail'][lang]}</p>", unsafe_allow_html=True)
                         if not diag['rev_found']: st.markdown(f"<p class='error-text'>{TEXTS['diag_rev_fail'][lang]}</p>", unsafe_allow_html=True)
                         if diag['products'] > 1: st.markdown(f"<p class='warning-text'>{TEXTS['warn_multiple'][lang]}</p>", unsafe_allow_html=True)
@@ -338,8 +319,13 @@ if any(plot_data):
     elif "Profissional" in estilo_gel: bg, txt, c_samp, c_lad = '#000000', 'white', 'white', 'white'
     else: bg, txt, c_samp, c_lad = 'white', 'black', 'black', 'black'
 
-    min_y = 50 + (100 * (agarose - 0.5)) * 0.8
+    # CORREÇÃO DA LARGURA DAS BANDAS (ESTÉTICA 15 POÇOS)
+    min_y_calc = 50 + (100 * (agarose - 0.5))
+    min_y = min_y_calc * 0.8
     max_y = 25000 / (agarose * 0.8)
+    
+    # Força o eixo a ter sempre 15 espaços para manter a largura da banda elegante
+    max_range = max(num_pocos, 15) + 0.5
 
     fig = go.Figure()
     for i, bands in enumerate(plot_data):
@@ -350,33 +336,31 @@ if any(plot_data):
         for (size, type, real) in bands:
             if size < min_y * 0.9 or size > max_y * 1.1: continue
             
-            # Espessura baseada na massa (se não for ladder)
-            width = 2
-            opacity = 0.8
+            width = 2; opacity = 0.8
             if is_ladder:
                 if size in [500, 1000, 3000]: width=5; opacity=1.0
             else:
                 if type == "Supercoiled": width=4; opacity=0.7
                 elif type == "PCR": width=3; opacity=0.9
             
+            # Largura física da banda fixada para visual 15 poços (0.25 para cada lado)
             fig.add_trace(go.Scatter(
-                x=[x-0.3, x+0.3], y=[size, size], mode='lines',
+                x=[x-0.25, x+0.25], y=[size, size], mode='lines',
                 line=dict(color=color, width=width), opacity=opacity,
                 hoverinfo='text', hovertext=f"{int(size)} pb"
             ))
             
             if is_ladder:
-                fig.add_trace(go.Scatter(x=[x-0.4], y=[size], mode="text", text=[str(size)], textfont=dict(color=txt, size=9), showlegend=False))
+                fig.add_trace(go.Scatter(x=[x-0.35], y=[size], mode="text", text=[str(size)], textfont=dict(color=txt, size=9), showlegend=False))
 
     fig.update_layout(
         plot_bgcolor=bg, paper_bgcolor=bg, height=600,
         margin=dict(t=30, b=30, l=50, r=30),
-        xaxis=dict(tickvals=list(range(1, num_pocos+1)), ticktext=labels_x, showgrid=False, tickfont=dict(color=txt)),
+        xaxis=dict(tickvals=list(range(1, num_pocos+1)), ticktext=labels_x, showgrid=False, tickfont=dict(color=txt), range=[0.5, max_range]),
         yaxis=dict(type='log', range=[math.log10(min_y), math.log10(max_y)], showgrid=False, showticklabels=False)
     )
     st.plotly_chart(fig, use_container_width=True)
     
-    # Download
     df = pd.DataFrame(relatorio)
     csv = df.to_csv(index=False).encode('utf-8')
     with st.expander(f"📥 {TEXTS['export_expander'][lang]}"):
