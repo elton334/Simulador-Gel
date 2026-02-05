@@ -2,6 +2,7 @@ import streamlit as st
 import plotly.graph_objects as go
 import pandas as pd
 import math
+import re
 from Bio.Seq import Seq
 from Bio.Restriction import RestrictionBatch, Analysis, CommOnly
 from io import StringIO, BytesIO
@@ -16,15 +17,14 @@ st.set_page_config(
 )
 
 # --- 2. SISTEMA DE TRADUÇÃO (DICIONÁRIO) ---
-# Aqui definimos todos os textos em Português (PT) e Inglês (EN)
 TEXTS = {
     "header_title": {
-        "PT": "Simulador de Digestão Enzimática",
-        "EN": "Enzymatic Digestion Simulator"
+        "PT": "Simulador de Biologia Molecular",
+        "EN": "Molecular Biology Simulator"
     },
     "header_sub": {
-        "PT": "Configure suas amostras abaixo para visualizar o resultado da digestão in silico.",
-        "EN": "Configure your samples below to visualize the in silico digestion result."
+        "PT": "Simule Digestão Enzimática e PCR in silico.",
+        "EN": "Simulate Enzymatic Digestion and PCR in silico."
     },
     "sidebar_config": {
         "PT": "CONFIGURAÇÕES",
@@ -52,81 +52,85 @@ TEXTS = {
     },
     "guide_content": {
         "PT": """
-        **1. Setup:** Ajuste poços e agarose.
-        **2. Amostras:**
-        * Faça upload de `.dna` ou `.fasta`.
-        * Para plasmídeos, marque **Circular**.
-        * Escolha as enzimas.
-        **3. Resultado:** O gel é gerado automaticamente.
+        **Modos de Uso:**
+        * **Digestão:** Upload do DNA + Escolha de Enzimas.
+        * **PCR:** Upload do Molde (Template) + Sequência dos Primers.
+        * **Ladder:** Escolha o marcador de peso molecular.
         """,
         "EN": """
-        **1. Setup:** Adjust wells and agarose.
-        **2. Samples:**
-        * Upload `.dna` or `.fasta`.
-        * For plasmids, check **Circular**.
-        * Select enzymes.
-        **3. Result:** The gel is generated automatically.
+        **Modes:**
+        * **Digestion:** DNA Upload + Enzyme Selection.
+        * **PCR:** Template Upload + Primer Sequences.
+        * **Ladder:** Select molecular weight marker.
         """
     },
     "well_title": {
         "PT": "Poço",
         "EN": "Well"
     },
-    "content_label": {
-        "PT": "Conteúdo",
-        "EN": "Content"
-    },
     "opt_sample": {
-        "PT": "Amostra",
-        "EN": "Sample"
+        "PT": "Digestão",
+        "EN": "Digestion"
     },
     "opt_ladder": {
         "PT": "Ladder",
         "EN": "Ladder"
+    },
+    "opt_pcr": {
+        "PT": "PCR",
+        "EN": "PCR"
     },
     "sel_ladder": {
         "PT": "Selecione o Ladder:",
         "EN": "Select Ladder:"
     },
     "label_gel": {
-        "PT": "Rótulo no Gel:",
-        "EN": "Gel Label:"
+        "PT": "Rótulo:",
+        "EN": "Label:"
     },
     "tab_file": {
         "PT": "Arquivo",
         "EN": "File"
     },
     "tab_text": {
-        "PT": "Texto Manual",
-        "EN": "Manual Text"
+        "PT": "Texto",
+        "EN": "Text"
     },
     "upload_label": {
-        "PT": "Upload DNA/Fasta",
-        "EN": "Upload DNA/Fasta"
+        "PT": "Upload DNA",
+        "EN": "Upload DNA"
     },
     "paste_label": {
-        "PT": "Colar Sequência",
-        "EN": "Paste Sequence"
+        "PT": "Sequência",
+        "EN": "Sequence"
     },
     "check_circular": {
         "PT": "Circular?",
         "EN": "Circular?"
     },
     "sel_enzymes": {
-        "PT": "Enzimas de Restrição",
-        "EN": "Restriction Enzymes"
+        "PT": "Enzimas",
+        "EN": "Enzymes"
+    },
+    "pcr_fwd": {
+        "PT": "Primer Forward (5'-3')",
+        "EN": "Forward Primer (5'-3')"
+    },
+    "pcr_rev": {
+        "PT": "Primer Reverse (5'-3')",
+        "EN": "Reverse Primer (5'-3')"
     },
     "result_title": {
         "PT": "Resultado da Eletroforese",
         "EN": "Electrophoresis Result"
     },
     "export_expander": {
-        "PT": "Exportar Dados do Relatório",
-        "EN": "Export Report Data"
+        "PT": "Exportar Dados",
+        "EN": "Export Data"
     },
     "btn_download": {
-        "PT": "Baixar Tabela (.csv)",
-        "EN": "Download Table (.csv)"
+        "PT": "Baixar .csv",
+        "EN": "Download .csv"
     },
     "empty_msg": {
         "PT": "Para começar, adicione amostras nos cartões acima.",
@@ -143,6 +147,10 @@ TEXTS = {
     "institute": {
         "PT": "Instituto Butantan",
         "EN": "Butantan Institute"
+    },
+    "pref_lang": {
+        "PT": "Idioma / Language",
+        "EN": "Language"
     }
 }
 
@@ -151,60 +159,67 @@ st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
-    /* Fundo Geral */
     .stApp {
-        background: linear-gradient(180deg, #F0F9FF 0%, #FFFFFF 100%); /* Azul gelo muito suave */
+        background: linear-gradient(180deg, #F0F9FF 0%, #FFFFFF 100%);
         font-family: 'Inter', sans-serif;
     }
 
-    /* Sidebar - TURQUESA SUAVE */
     section[data-testid="stSidebar"] {
-        background-color: #E0F7FA; /* Turquesa Claro */
+        background-color: #E0F7FA;
         border-right: 1px solid #B2EBF2;
     }
 
-    /* Títulos e Textos */
+    /* SLIDER PERSONALIZADO */
+    div[data-baseweb="slider"] div[class*="StyledThumb"] {
+        background-color: #0F766E !important;
+        border-color: #0F766E !important;
+    }
+    div[data-baseweb="slider"] div[class*="StyledTrack"] > div {
+        background-color: #0F766E !important;
+    }
+    div[data-baseweb="slider"] div[class*="StyledTrack"] {
+        background-color: #B2EBF2 !important;
+    }
+
     h1, h2, h3 {
         color: #0F172A !important;
         font-weight: 700 !important;
         letter-spacing: -0.02em;
     }
     
-    /* Cards (Expanders) - MINIMALISTAS */
     .stExpander {
         background-color: #FFFFFF;
-        border-radius: 8px !important; /* Bordas menos arredondadas */
+        border-radius: 6px !important;
         border: 1px solid #E2E8F0 !important;
-        box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important; /* Sombra sutil */
-        margin-bottom: 0.5rem; /* Menos espaço entre cards */
+        box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
+        margin-bottom: 0.5rem;
     }
     
     .stExpander:hover {
-        border-color: #4F46E5 !important;
+        border-color: #0F766E !important;
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
     }
 
-    /* Reduzir Padding interno dos cards para ficarem menos "largos/gordos" */
     div[data-testid="stExpanderDetails"] {
-        padding-top: 0.5rem !important;
-        padding-bottom: 1rem !important;
+        padding: 0.5rem !important;
     }
 
-    /* Botões */
     .stButton > button {
-        background-color: #4F46E5;
+        background-color: #0F766E;
         color: white;
         border-radius: 6px;
         font-weight: 500;
         border: none;
-        box-shadow: none;
     }
     .stButton > button:hover {
-        background-color: #4338CA;
+        background-color: #0d6e66;
         color: white;
     }
+    
+    span[data-baseweb="checkbox"] div {
+        background-color: #0F766E !important;
+    }
 
-    /* Rodapé Minimalista */
     .footer {
         width: 100%;
         text-align: center;
@@ -218,7 +233,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 4. BACKEND (LÓGICA) ---
+# --- 4. BACKEND (LÓGICA DIGESTÃO E PCR) ---
 
 TODAS_ENZIMAS = sorted([str(e) for e in CommOnly])
 
@@ -326,10 +341,54 @@ def calcular_digestao(sequencia, enzimas, eh_circular):
             
     return [(frag, "Fragmento", frag) for frag in sorted(fragmentos, reverse=True)]
 
+def calcular_pcr(sequencia, fwd, rev, eh_circular):
+    """Simula PCR procurando primers na sequência"""
+    if not sequencia or sequencia.startswith("Erro"): return []
+    if not fwd or not rev: return []
+    
+    # Prepara sequências (limpa espaços e converte para maiúsculo)
+    seq_upper = sequencia.upper()
+    fwd_upper = "".join(fwd.split()).upper()
+    rev_upper = "".join(rev.split()).upper()
+    
+    if len(fwd_upper) < 5 or len(rev_upper) < 5: return [] # Primers muito curtos
+
+    # Encontra Forward (Fita Sense)
+    # Nota: Usamos expressões regulares para achar todas as ocorrências
+    fwd_sites = [m.start() for m in re.finditer(fwd_upper, seq_upper)]
+    
+    # Encontra Reverse (Fita Antisense -> Procura Comp. Reverso na Sense)
+    rev_rc = str(Seq(rev_upper).reverse_complement())
+    rev_sites = [m.start() for m in re.finditer(rev_rc, seq_upper)]
+    
+    produtos = []
+    
+    # Lógica simples: parear cada Fwd com o Rev mais próximo
+    for f in fwd_sites:
+        for r in rev_sites:
+            # Caso Linear
+            if r > f:
+                # Tamanho = (Fim do Primer Rev) - (Inicio do Primer Fwd)
+                # O sítio 'r' é onde começa o rev_complement na fita sense
+                tamanho = (r + len(rev_rc)) - f
+                produtos.append(tamanho)
+            # Caso Circular (Rev está antes do Fwd, atravessa a origem)
+            elif eh_circular and r < f:
+                tamanho = (len(seq_upper) - f) + (r + len(rev_rc))
+                produtos.append(tamanho)
+                
+    if not produtos:
+        return []
+    
+    # Retorna formatado para o plot: (Tamanho, Tipo, TamanhoReal)
+    return [(p, "PCR Product", p) for p in sorted(produtos, reverse=True)]
+
 # --- 5. INTERFACE DO USUÁRIO ---
 
+if 'lang' not in st.session_state:
+    st.session_state.lang = "PT"
+
 with st.sidebar:
-    # Título Minimalista
     st.markdown("""
     <div style="text-align: left; margin-bottom: 20px;">
         <h1 style="font-family: 'Inter', sans-serif; font-weight: 800; color: #0F766E; font-size: 26px; letter-spacing: -1px; margin:0;">
@@ -338,16 +397,13 @@ with st.sidebar:
         <p style="font-size: 10px; color: #0F766E; opacity: 0.7; margin:0; text-transform: uppercase; letter-spacing: 1px;">Studio</p>
     </div>
     """, unsafe_allow_html=True)
-    
-    # Seletor de Idioma
-    idioma_selecionado = st.selectbox("", ["Português", "English"], label_visibility="collapsed")
-    lang = "PT" if idioma_selecionado == "Português" else "EN"
-    
-    st.divider()
+    st.markdown("---")
+
+    lang = st.session_state.lang
 
     st.caption(TEXTS["sidebar_config"][lang])
     
-    num_pocos = st.slider(TEXTS["sidebar_wells"][lang], 1, 15, 3)
+    num_pocos = st.slider(TEXTS["sidebar_wells"][lang], 1, 15, 4)
     agarose = st.slider(TEXTS["sidebar_agarose"][lang], 0.5, 2.0, 1.0, 0.1)
     
     st.divider()
@@ -363,10 +419,18 @@ with st.sidebar:
     with st.expander(f"ℹ️ {TEXTS['guide_title'][lang]}"):
         st.markdown(TEXTS["guide_content"][lang])
     
-    # Rodapé da Sidebar
     st.markdown("---")
+    
+    st.caption(TEXTS["pref_lang"][lang])
+    idioma_selecionado = st.selectbox("Lang", ["Português", "English"], label_visibility="collapsed")
+    
+    novo_lang = "PT" if idioma_selecionado == "Português" else "EN"
+    if novo_lang != st.session_state.lang:
+        st.session_state.lang = novo_lang
+        st.rerun()
+
     st.markdown(f"""
-    <div style="font-size: 11px; color: #374151; line-height: 1.4;">
+    <div style="font-size: 11px; color: #334155; line-height: 1.4; margin-top: 15px;">
         <strong>{TEXTS['created_by'][lang]} Elton Ostetti</strong><br>
         {TEXTS['lab_name'][lang]}<br>
         {TEXTS['institute'][lang]}
@@ -384,19 +448,20 @@ dados_para_plotar = []
 labels_eixo_x = []
 nomes_ladders = [] 
 
-cols = st.columns(2)
+cols = st.columns(4)
 
 for i in range(num_pocos):
-    col_atual = cols[i % 2]
+    col_atual = cols[i % 4]
     with col_atual:
-        # Título do Card sem emoji, apenas número para ser sério
-        with st.expander(f"{TEXTS['well_title'][lang]} {i+1}", expanded=(i==0)):
-            # Opções de tipo
-            opcoes_tipo = [TEXTS['opt_sample'][lang], TEXTS['opt_ladder'][lang]]
-            tipo_display = st.radio(f"{TEXTS['content_label'][lang]} {i+1}:", options=opcoes_tipo, key=f"t_{i}", horizontal=True, label_visibility="collapsed")
+        with st.expander(f"🔹 {TEXTS['well_title'][lang]} {i+1}", expanded=(i==0)):
+            # Opções de tipo incluindo PCR
+            opcoes_tipo = [TEXTS['opt_sample'][lang], TEXTS['opt_pcr'][lang], TEXTS['opt_ladder'][lang]]
+            tipo_display = st.radio("Tipo", options=opcoes_tipo, key=f"t_{i}", horizontal=True, label_visibility="collapsed")
             
-            tipo = "Ladder" if tipo_display == TEXTS['opt_ladder'][lang] else "Amostra"
-            rotulo_padrao = str(i+1)
+            # Mapeia display para chave interna
+            if tipo_display == TEXTS['opt_ladder'][lang]: tipo = "Ladder"
+            elif tipo_display == TEXTS['opt_pcr'][lang]: tipo = "PCR"
+            else: tipo = "Amostra"
             
             if tipo == "Ladder":
                 lad = st.selectbox(TEXTS['sel_ladder'][lang], list(LADDERS.keys()), key=f"l_{i}")
@@ -414,72 +479,97 @@ for i in range(num_pocos):
                     "Detalhes": lad,
                     "Bandas (pb)": "; ".join([str(t) for t in LADDERS[lad]])
                 })
-            else:
+            
+            else: # Amostra ou PCR
                 nomes_ladders.append(None)
-                tab_f, tab_t = st.tabs([f"📂 {TEXTS['tab_file'][lang]}", f"📝 {TEXTS['tab_text'][lang]}"])
+                tab_f, tab_t = st.tabs([f"📂", f"📝"])
                 seq, nome_arquivo = "", ""
                 
                 with tab_f:
-                    up = st.file_uploader(TEXTS['upload_label'][lang], type=['dna', 'fasta', 'txt', 'fa'], key=f"u_{i}")
+                    up = st.file_uploader(TEXTS['upload_label'][lang], type=['dna', 'fasta', 'txt', 'fa'], key=f"u_{i}", label_visibility="collapsed")
                     if up: 
                         nome_arquivo, seq = processar_upload(up)
                         if nome_arquivo == "Erro": 
                             st.error(seq); seq = ""
                 with tab_t:
-                    txt = st.text_area(TEXTS['paste_label'][lang], height=70, key=f"tx_{i}")
+                    txt = st.text_area(TEXTS['paste_label'][lang], height=70, key=f"tx_{i}", label_visibility="collapsed", placeholder="ATGC...")
                     if txt and not seq: 
                         nome_t, seq_t = processar_texto_manual(txt)
                         if nome_t != "Seq Manual": nome_arquivo = nome_t
                         seq = seq_t
                 
                 st.markdown("---")
-                c1, c2 = st.columns([1, 2])
-                circ = c1.checkbox(TEXTS['check_circular'][lang], True, key=f"c_{i}")
-                enz = c2.multiselect(TEXTS['sel_enzymes'][lang], TODAS_ENZIMAS, key=f"e_{i}")
                 
                 val_rotulo = nome_arquivo if nome_arquivo else str(i+1)
-                rotulo_custom = st.text_input(TEXTS['label_gel'][lang], value=val_rotulo[:12], key=f"lbl_{i}")
-                labels_eixo_x.append(rotulo_custom)
+                
+                if tipo == "Amostra":
+                    circ = st.checkbox(TEXTS['check_circular'][lang], True, key=f"c_{i}")
+                    enz = st.multiselect(TEXTS['sel_enzymes'][lang], TODAS_ENZIMAS, key=f"e_{i}")
+                    rotulo_custom = st.text_input(TEXTS['label_gel'][lang], value=val_rotulo[:10], key=f"lbl_{i}")
+                    labels_eixo_x.append(rotulo_custom)
 
-                if seq:
-                    try:
-                        res = calcular_digestao(seq, enz, circ)
-                        dados_para_plotar.append(res)
-                        
-                        fragmentos_str = "; ".join([str(int(b[0])) for b in res])
-                        desc_enzimas = ", ".join(enz) if enz else ("Circular Uncut" if circ else "Linear Uncut")
-                        relatorio_dados.append({
-                            "Poço": i+1,
-                            "Identificação": rotulo_custom,
-                            "Tipo": "Amostra",
-                            "Detalhes": desc_enzimas,
-                            "Bandas (pb)": fragmentos_str
-                        })
-                        
-                    except Exception as e:
+                    if seq:
+                        try:
+                            res = calcular_digestao(seq, enz, circ)
+                            dados_para_plotar.append(res)
+                            
+                            fragmentos_str = "; ".join([str(int(b[0])) for b in res])
+                            desc_enzimas = ", ".join(enz) if enz else "Uncut"
+                            relatorio_dados.append({
+                                "Poço": i+1,
+                                "Identificação": rotulo_custom,
+                                "Tipo": "Digestão",
+                                "Detalhes": desc_enzimas,
+                                "Bandas (pb)": fragmentos_str
+                            })
+                        except Exception as e:
+                            dados_para_plotar.append([])
+                            st.error("Error")
+                    else:
                         dados_para_plotar.append([])
-                        st.error(f"Error: {e}")
-                else:
-                    dados_para_plotar.append([])
-                    relatorio_dados.append({
-                        "Poço": i+1,
-                        "Identificação": rotulo_custom,
-                        "Tipo": "Vazio",
-                        "Detalhes": "-",
-                        "Bandas (pb)": "-"
-                    })
+                        relatorio_dados.append({"Poço": i+1, "Tipo": "Vazio", "Bandas (pb)": "-"})
+
+                elif tipo == "PCR":
+                    fwd = st.text_input("Fwd Primer", key=f"fwd_{i}", placeholder="5'-3'")
+                    rev = st.text_input("Rev Primer", key=f"rev_{i}", placeholder="5'-3'")
+                    circ = st.checkbox(TEXTS['check_circular'][lang], False, key=f"cp_{i}") # Default false for PCR template normally
+                    
+                    rotulo_custom = st.text_input(TEXTS['label_gel'][lang], value=f"PCR-{i+1}", key=f"lbl_{i}")
+                    labels_eixo_x.append(rotulo_custom)
+                    
+                    if seq and fwd and rev:
+                        try:
+                            res = calcular_pcr(seq, fwd, rev, circ)
+                            dados_para_plotar.append(res)
+                            
+                            if not res:
+                                st.warning("No product")
+                            
+                            fragmentos_str = "; ".join([str(int(b[0])) for b in res])
+                            relatorio_dados.append({
+                                "Poço": i+1,
+                                "Identificação": rotulo_custom,
+                                "Tipo": "PCR",
+                                "Detalhes": f"F:{fwd[:5]}.. R:{rev[:5]}..",
+                                "Bandas (pb)": fragmentos_str if res else "Nenhum produto"
+                            })
+                        except Exception as e:
+                            dados_para_plotar.append([])
+                            st.error(f"Error: {e}")
+                    else:
+                        dados_para_plotar.append([])
+                        relatorio_dados.append({"Poço": i+1, "Tipo": "Vazio", "Bandas (pb)": "-"})
 
 st.markdown(" ") 
 st.markdown(f"### {TEXTS['result_title'][lang]}")
 
 if any(dados_para_plotar):
     
-    # Cores (Ordem corrigida no selectbox, lógica ajustada aqui)
     if "Neon" in estilo_gel:
         bg_color = '#111827'; text_color = 'white'; color_sample = '#00ff41'; color_ladder = '#ff9900'
-    elif "Profissional" in estilo_gel: # Dark P&B (Padrão)
+    elif "Profissional" in estilo_gel: 
         bg_color = '#000000'; text_color = 'white'; color_sample = 'white'; color_ladder = 'white'
-    else: # Publicação Light
+    else: 
         bg_color = 'white'; text_color = 'black'; color_sample = 'black'; color_ladder = 'black'
 
     min_view = 50 + (100 * (agarose - 0.5)) 
