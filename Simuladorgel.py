@@ -10,118 +10,322 @@ from Bio import SeqIO
 
 # --- 1. CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(
-    page_title="BioSpark Studio Pro",
+    page_title="BioSpark Studio",
     layout="wide",
     page_icon="🧬",
     initial_sidebar_state="expanded"
 )
 
-# --- 2. GERENCIAMENTO DE ESTADO (O CÉREBRO DA v2.0) ---
-# Inicializa variáveis para persistência se não existirem
-if 'lab_notebook' not in st.session_state:
-    st.session_state.lab_notebook = ""
-
-# Função para injetar dados do Upload em Lote nos poços individuais
-def handle_batch_upload():
-    uploaded_files = st.session_state.batch_uploader
-    if uploaded_files:
-        for idx, file in enumerate(uploaded_files):
-            # Limite de 15 poços
-            if idx >= 15: break
-            
-            # Processa o arquivo usando a função existente
-            name, seq = processar_upload(file)
-            
-            if name != "Erro":
-                # Injeta diretamente no estado dos widgets dos poços
-                # As chaves dos widgets são: tx_{i} para texto e lbl_{i} para rótulo
-                st.session_state[f"tx_{idx}"] = seq
-                st.session_state[f"lbl_{idx}"] = name[:15]
-                # Define o tipo como 'Amostra' (Digestão) por padrão para facilitar
-                # Nota: Mudar o radio button via estado é complexo, mantemos o padrão do usuário
-
-# --- 3. SISTEMA DE TRADUÇÃO ---
+# --- 2. SISTEMA DE TRADUÇÃO (DICIONÁRIO COMPLETO) ---
+# Todas as chaves foram verificadas para evitar KeyError
 TEXTS = {
-    "header_title": { "PT": "BioSpark Studio", "EN": "BioSpark Studio" },
-    "header_sub": { "PT": "Simulação Avançada: Digestão, PCR e Batch Processing.", "EN": "Advanced Simulation: Digestion, PCR and Batch Processing." },
-    "sidebar_config": { "PT": "CONFIGURAÇÕES GERAIS", "EN": "GENERAL SETTINGS" },
-    "sidebar_wells": { "PT": "Nº de Poços", "EN": "Well Count" },
-    "sidebar_agarose": { "PT": "Agarose (%)", "EN": "Agarose (%)" },
-    "batch_label": { "PT": "⚡ Upload em Lote (Arrastar múltiplos arquivos)", "EN": "⚡ Batch Upload (Drag multiple files)" },
-    "notebook_title": { "PT": "📔 Caderno de Lab", "EN": "📔 Lab Notebook" },
-    
-    # Mantendo os textos clássicos
-    "well_title": { "PT": "Poço", "EN": "Well" },
-    "opt_sample": { "PT": "Digestão", "EN": "Digestion" },
-    "opt_ladder": { "PT": "Ladder", "EN": "Ladder" },
-    "opt_pcr": { "PT": "PCR", "EN": "PCR" },
-    "sel_ladder": { "PT": "Selecione o Ladder:", "EN": "Select Ladder:" },
-    "label_gel": { "PT": "Rótulo:", "EN": "Label:" },
-    "tab_file": { "PT": "📂 Arquivo", "EN": "📂 File" },
-    "tab_text": { "PT": "📝 Editor", "EN": "📝 Editor" },
-    "upload_label": { "PT": "Upload único", "EN": "Single Upload" },
-    "paste_label": { "PT": "Sequência", "EN": "Sequence" },
-    "check_circular": { "PT": "Circular?", "EN": "Circular?" },
-    "sel_enzymes": { "PT": "Enzimas", "EN": "Enzymes" },
-    "pcr_fwd": { "PT": "Fwd (5'->3')", "EN": "Fwd (5'->3')" },
-    "pcr_rev": { "PT": "Rev (3'->5' ou 5'->3')", "EN": "Rev (3'->5' or 5'->3')" },
-    "result_title": { "PT": "Resultado da Eletroforese", "EN": "Electrophoresis Result" },
-    "export_expander": { "PT": "Exportar Dados", "EN": "Export Data" },
-    "btn_download": { "PT": "Baixar .csv", "EN": "Download .csv" },
-    "empty_msg": { "PT": "Adicione amostras ou use o Upload em Lote.", "EN": "Add samples or use Batch Upload." },
-    "created_by": { "PT": "Dev.", "EN": "Dev." },
-    "report_bug": { "PT": "✉️ Reportar Erro", "EN": "✉️ Report Bug" },
-    "warn_multiple": { "PT": "⚠️ Inespecífico!", "EN": "⚠️ Non-specific!" },
-    "warn_no_product": { "PT": "Sem produto.", "EN": "No product." },
-    "diag_fwd_fail": { "PT": "❌ Fwd fail", "EN": "❌ Fwd fail" },
-    "diag_rev_fail": { "PT": "❌ Rev fail", "EN": "❌ Rev fail" },
-    "ack_title": { "PT": "Apoio e Afiliação", "EN": "Support & Affiliation" }
+    "header_title": {
+        "PT": "Simulador de Biologia Molecular",
+        "EN": "Molecular Biology Simulator"
+    },
+    "header_sub": {
+        "PT": "Digestão Enzimática e PCR In Silico (com suporte a Overhangs e Múltiplos Sítios).",
+        "EN": "In Silico Enzymatic Digestion and PCR (supports Overhangs and Multiple Sites)."
+    },
+    "sidebar_config": {
+        "PT": "CONFIGURAÇÕES",
+        "EN": "SETTINGS"
+    },
+    "sidebar_wells": {
+        "PT": "Número de Poços",
+        "EN": "Number of Wells"
+    },
+    "sidebar_agarose": {
+        "PT": "Agarose (%)",
+        "EN": "Agarose (%)"
+    },
+    "sidebar_visual": {
+        "PT": "VISUALIZAÇÃO",
+        "EN": "VISUALIZATION"
+    },
+    "sidebar_theme": {
+        "PT": "Tema do Gel",
+        "EN": "Gel Theme"
+    },
+    "guide_title": {
+        "PT": "Guia Rápido",
+        "EN": "Quick Guide"
+    },
+    "guide_content": {
+        "PT": """
+        **🧬 Funcionalidades:**
+        * **Digestão:** Simula o corte com enzimas de restrição.
+        * **PCR:** Simula a amplificação de fragmentos (suporta overhangs).
+        
+        **📂 Arquivos Suportados:**
+        * **.dna** (SnapGene)
+        * **.fasta / .fa** (Padrão)
+        * **.txt** (Sequência pura)
+        
+        **🛠️ Como Usar:**
+        1. Defina o **Nº de Poços** e **Agarose**.
+        2. No cartão, escolha: **Amostra**, **PCR** ou **Ladder**.
+        3. Faça upload do arquivo ou cole a sequência.
+        4. Rotule suas amostras para organização.
+        
+        **📥 Exportação:**
+        * Baixe a tabela de fragmentos (.csv) no final da página.
+        """,
+        "EN": """
+        **🧬 Features:**
+        * **Digestion:** Simulates restriction enzyme cuts.
+        * **PCR:** Simulates fragment amplification (supports overhangs).
+        
+        **📂 Supported Files:**
+        * **.dna** (SnapGene)
+        * **.fasta / .fa** (Standard)
+        * **.txt** (Raw sequence)
+        
+        **🛠️ How to Use:**
+        1. Set **Well Count** and **Agarose**.
+        2. In the card, select: **Sample**, **PCR** or **Ladder**.
+        3. Upload file or paste sequence.
+        4. Label your samples.
+        
+        **📥 Export:**
+        * Download the fragment table (.csv) at the bottom.
+        """
+    },
+    "well_title": {
+        "PT": "Poço",
+        "EN": "Well"
+    },
+    "opt_sample": {
+        "PT": "Digestão",
+        "EN": "Digestion"
+    },
+    "opt_ladder": {
+        "PT": "Ladder",
+        "EN": "Ladder"
+    },
+    "opt_pcr": {
+        "PT": "PCR",
+        "EN": "PCR"
+    },
+    "sel_ladder": {
+        "PT": "Selecione o Ladder:",
+        "EN": "Select Ladder:"
+    },
+    "label_gel": {
+        "PT": "Rótulo:",
+        "EN": "Label:"
+    },
+    # CHAVES DE ABAS E INPUTS
+    "tab_file": {
+        "PT": "📂 Upload Arquivo",
+        "EN": "📂 Upload File"
+    },
+    "tab_text": {
+        "PT": "📝 Digitar/Colar",
+        "EN": "📝 Type/Paste"
+    },
+    "upload_label": {
+        "PT": "Upload DNA",
+        "EN": "Upload DNA"
+    },
+    "paste_label": {
+        "PT": "Sequência",
+        "EN": "Sequence"
+    },
+    "check_circular": {
+        "PT": "Circular?",
+        "EN": "Circular?"
+    },
+    "sel_enzymes": {
+        "PT": "Enzimas",
+        "EN": "Enzymes"
+    },
+    "pcr_fwd": {
+        "PT": "Primer Forward",
+        "EN": "Forward Primer"
+    },
+    "pcr_rev": {
+        "PT": "Primer Reverse",
+        "EN": "Reverse Primer"
+    },
+    "result_title": {
+        "PT": "Resultado da Eletroforese",
+        "EN": "Electrophoresis Result"
+    },
+    "export_expander": {
+        "PT": "Exportar Dados",
+        "EN": "Export Data"
+    },
+    "btn_download": {
+        "PT": "Baixar .csv",
+        "EN": "Download .csv"
+    },
+    "empty_msg": {
+        "PT": "Para começar, adicione amostras nos cartões acima.",
+        "EN": "To start, add samples in the cards above."
+    },
+    "created_by": {
+        "PT": "Desenvolvido por",
+        "EN": "Developed by"
+    },
+    "lab_name": {
+        "PT": "Laboratório de Biofármacos",
+        "EN": "Biopharmaceuticals Laboratory"
+    },
+    "institute": {
+        "PT": "Instituto Butantan",
+        "EN": "Butantan Institute"
+    },
+    "pref_lang": {
+        "PT": "Idioma / Language",
+        "EN": "Language"
+    },
+    "report_bug": {
+        "PT": "✉️ Reportar Problema",
+        "EN": "✉️ Report Bug"
+    },
+    "warn_multiple": {
+        "PT": "⚠️ MÚLTIPLOS SÍTIOS DE LIGAÇÃO DETECTADOS!",
+        "EN": "⚠️ MULTIPLE BINDING SITES DETECTED!"
+    },
+    "warn_no_product": {
+        "PT": "Nenhum produto (Verifique orientação 3')",
+        "EN": "No product (Check 3' orientation)"
+    },
+    "ack_title": {
+        "PT": "Apoio e Afiliação",
+        "EN": "Support & Affiliation"
+    }
 }
 
-# --- 4. ESTILO CSS (TURQUESA PRO) ---
+# --- 3. ESTILO CSS (TURQUESA + MINIMALISTA) ---
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-    .stApp { background: linear-gradient(180deg, #F0F9FF 0%, #FFFFFF 100%); font-family: 'Inter', sans-serif; }
-    
-    /* Sidebar */
-    section[data-testid="stSidebar"] { background-color: #E0F7FA; border-right: 1px solid #B2EBF2; }
-    section[data-testid="stSidebar"] .block-container { padding-top: 1rem; gap: 0.5rem; }
 
-    /* Componentes */
-    div[data-baseweb="slider"] div[class*="StyledThumb"] { background-color: #0F766E !important; border-color: #0F766E !important; }
-    div[data-baseweb="slider"] div[class*="StyledTrack"] > div { background-color: #0F766E !important; }
-    div[data-baseweb="slider"] div[class*="StyledTrack"] { background-color: #B2EBF2 !important; }
-    
-    h1, h2, h3 { color: #0F172A !important; font-weight: 700 !important; letter-spacing: -0.02em; }
-    
-    .stExpander { background-color: #FFFFFF; border-radius: 6px !important; border: 1px solid #E2E8F0 !important; box-shadow: 0 1px 2px 0 rgba(0,0,0,0.05) !important; margin-bottom: 0.5rem; }
-    .stExpander:hover { border-color: #0F766E !important; }
-    
-    .stButton > button { background-color: #0F766E; color: white; border-radius: 6px; font-weight: 500; border: none; }
-    .stButton > button:hover { background-color: #0d6e66; color: white; }
-    
-    span[data-baseweb="checkbox"] div { background-color: #0F766E !important; }
-    button[data-baseweb="tab"] { font-size: 13px !important; padding: 5px 10px !important; }
+    .stApp {
+        background: linear-gradient(180deg, #F0F9FF 0%, #FFFFFF 100%);
+        font-family: 'Inter', sans-serif;
+    }
 
-    /* Área de Batch Upload */
-    div[data-testid="stFileUploader"] { margin-bottom: 10px; }
-
-    /* Rodapés */
-    .sidebar-footer { margin-top: 15px; padding-top: 10px; border-top: 1px solid #CBD5E1; font-size: 11px; color: #333333; line-height: 1.4; }
-    .sidebar-footer strong { color: #111827; font-weight: 600; }
-    .bug-report { font-size: 10px; color: #4B5563; text-decoration: none; margin-left: 5px; }
-    .bug-report:hover { color: #0F766E; text-decoration: underline; }
-    .footer { width: 100%; text-align: center; padding: 20px 0; font-size: 11px; color: #64748B; border-top: 1px solid #CBD5E1; margin-top: 40px; opacity: 0.8; }
+    section[data-testid="stSidebar"] {
+        background-color: #E0F7FA;
+        border-right: 1px solid #B2EBF2;
+        padding-top: 1rem;
+    }
     
-    .warning-text { color: #DC2626; font-weight: bold; font-size: 11px; margin: 0; }
-    .error-text { color: #B91C1C; font-size: 11px; margin: 0; }
+    /* Compactar um pouco o topo da sidebar */
+    section[data-testid="stSidebar"] .block-container {
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+    }
+
+    div[data-baseweb="slider"] div[class*="StyledThumb"] {
+        background-color: #0F766E !important;
+        border-color: #0F766E !important;
+    }
+    div[data-baseweb="slider"] div[class*="StyledTrack"] > div {
+        background-color: #0F766E !important;
+    }
+    div[data-baseweb="slider"] div[class*="StyledTrack"] {
+        background-color: #B2EBF2 !important;
+    }
+
+    h1, h2, h3 {
+        color: #0F172A !important;
+        font-weight: 700 !important;
+        letter-spacing: -0.02em;
+    }
+    
+    .stExpander {
+        background-color: #FFFFFF;
+        border-radius: 6px !important;
+        border: 1px solid #E2E8F0 !important;
+        box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
+        margin-bottom: 0.5rem;
+    }
+    
+    .stExpander:hover {
+        border-color: #0F766E !important;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
+    }
+
+    div[data-testid="stExpanderDetails"] {
+        padding: 0.5rem !important;
+    }
+
+    .stButton > button {
+        background-color: #0F766E;
+        color: white;
+        border-radius: 6px;
+        font-weight: 500;
+        border: none;
+    }
+    .stButton > button:hover {
+        background-color: #0d6e66;
+        color: white;
+    }
+    
+    span[data-baseweb="checkbox"] div {
+        background-color: #0F766E !important;
+    }
+    
+    /* Abas com texto legível */
+    button[data-baseweb="tab"] {
+        font-size: 14px !important;
+        font-weight: 500 !important;
+        padding: 8px 16px !important;
+    }
+
+    .footer {
+        width: 100%;
+        text-align: center;
+        padding: 20px 0;
+        font-size: 11px;
+        color: #64748B;
+        border-top: 1px solid #CBD5E1;
+        margin-top: 40px;
+        opacity: 0.8;
+    }
+    
+    /* RODAPÉ DA SIDEBAR (Preto/Cinza Escuro) */
+    .sidebar-footer {
+        margin-top: 20px;
+        padding-top: 15px;
+        border-top: 1px solid #B2EBF2;
+        font-size: 11px;
+        color: #333333; 
+        line-height: 1.5;
+    }
+    
+    .sidebar-footer strong {
+        color: #111827; /* Preto quase absoluto para destaque */
+    }
+    
+    .bug-report {
+        font-size: 11px;
+        color: #4B5563;
+        text-decoration: none;
+        margin-top: 5px;
+        display: inline-block;
+    }
+    .bug-report:hover {
+        color: #0F766E;
+        text-decoration: underline;
+    }
+    
+    .warning-text {
+        color: #DC2626;
+        font-weight: bold;
+        font-size: 12px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-# --- 5. LÓGICA BIOLÓGICA (MANTIDA V3.0) ---
+# --- 4. BACKEND (LÓGICA BIOLÓGICA) ---
 
 TODAS_ENZIMAS = sorted([str(e) for e in CommOnly])
+
 LADDERS = {
     "1kb Plus DNA Ladder": [100, 200, 300, 400, 500, 650, 850, 1000, 1650, 2000, 3000, 4000, 5000, 6000, 8000, 10000, 12000],
     "1kb DNA Ladder (Genérico)": [250, 500, 750, 1000, 1500, 2000, 2500, 3000, 4000, 5000, 6000, 8000, 10000],
@@ -129,13 +333,8 @@ LADDERS = {
     "High Mass": [1000, 2000, 3000, 4000, 5000, 6000, 8000, 10000, 20000, 48500]
 }
 
-def clean_sequence(seq):
-    if not seq: return ""
-    return re.sub(r'[^a-zA-Z]', '', seq).upper()
-
 def processar_upload(input_data):
     try:
-        # Suporte a upload direto (BytesIO) ou arquivo do Streamlit
         nome_arquivo = input_data.name
         nome_sugerido = nome_arquivo.rsplit('.', 1)[0]
         
@@ -144,47 +343,75 @@ def processar_upload(input_data):
                 bytes_io = BytesIO(input_data.getvalue())
                 record = SeqIO.read(bytes_io, "snapgene")
                 return nome_sugerido, str(record.seq).upper()
-            except Exception as e: return "Erro", f"Erro .dna: {str(e)}"
-        
+            except Exception as e:
+                return "Erro", f"Erro .dna: {str(e)}"
+
         bytes_data = input_data.getvalue()
-        try: conteudo = bytes_data.decode("utf-8")
-        except: conteudo = bytes_data.decode("latin-1")
-        
+        try:
+            conteudo = bytes_data.decode("utf-8")
+        except UnicodeDecodeError:
+            conteudo = bytes_data.decode("latin-1")
+
         if ">" in conteudo:
             try:
                 iterator = SeqIO.parse(StringIO(conteudo), "fasta")
                 record = next(iterator)
-                return record.id, str(record.seq).upper()
-            except: pass
-            
-        seq_limpa = "".join([l.strip() for l in conteudo.splitlines() if not l.startswith(">")])
-        seq_final = clean_sequence(seq_limpa)
-        if len(seq_final) > 0 and any(c not in "ATGCNRYKMSWBDHV" for c in seq_final[:100]):
+                return record.id if record.id else nome_sugerido, str(record.seq).upper()
+            except:
+                pass 
+
+        linhas = conteudo.splitlines()
+        seq_limpa = ""
+        for linha in linhas:
+            linha = linha.strip()
+            if not linha or linha.startswith(">") or linha.startswith(";"): continue
+            seq_limpa += linha
+        
+        seq_final = "".join(seq_limpa.split()).upper()
+        if any(c not in "ATGCNRYKMSWBDHV" for c in seq_final[:100]): 
              return "Erro", "Arquivo inválido."
+
         return nome_sugerido, seq_final
-    except Exception as e: return "Erro", str(e)
+
+    except Exception as e:
+        return "Erro", str(e)
 
 def processar_texto_manual(texto):
-    if ">" in texto:
-        try:
+    try:
+        if ">" in texto:
             iterator = SeqIO.parse(StringIO(texto), "fasta")
             record = next(iterator)
             return record.id, str(record.seq).upper()
-        except: pass
-    return "Seq Manual", clean_sequence(texto)
+        else:
+            return "Seq Manual", "".join(texto.split()).upper()
+    except:
+        return "Erro", ""
 
 def calcular_digestao(sequencia, enzimas, eh_circular):
     if not sequencia or sequencia.startswith("Erro"): return []
+    sequencia = "".join([c for c in sequencia if c in "ATGCMRWSYKVHDBN"])
+    if not sequencia: return []
+
     seq_obj = Seq(sequencia)
     tamanho_total = len(seq_obj)
-    if eh_circular and not enzimas: return [(tamanho_total * 1.4, "Nicked", tamanho_total), (tamanho_total * 0.7, "Supercoiled", tamanho_total)]
-    if not enzimas: return [(tamanho_total, "Linear", tamanho_total)]
+    
+    if eh_circular and not enzimas:
+        return [
+            (tamanho_total * 1.4, "Nicked (Relaxed)", tamanho_total),
+            (tamanho_total * 0.7, "Supercoiled", tamanho_total)
+        ]
+    
+    if not enzimas: 
+        return [(tamanho_total, "Linear", tamanho_total)]
     
     rb = RestrictionBatch(enzimas)
     analise = Analysis(rb, seq_obj, linear=not eh_circular)
     cortes = analise.full()
     locais = sorted(list(set([local for lista in cortes.values() for local in lista])))
-    if not locais: return [(tamanho_total, "Uncut", tamanho_total)]
+    
+    if not locais: 
+        tipo = "Circ. (Sítio Ausente)" if eh_circular else "Lin. (Não Cortado)"
+        return [(tamanho_total, tipo, tamanho_total)]
         
     fragmentos = []
     if not eh_circular:
@@ -194,222 +421,352 @@ def calcular_digestao(sequencia, enzimas, eh_circular):
             prev = cut
         fragmentos.append(tamanho_total - prev)
     else:
-        if len(locais) == 1: fragmentos.append(tamanho_total)
+        if len(locais) == 1:
+            fragmentos.append(tamanho_total)
         else:
-            for i in range(len(locais)-1): fragmentos.append(locais[i+1] - locais[i])
+            for i in range(len(locais)-1):
+                fragmentos.append(locais[i+1] - locais[i])
             fragmentos.append((tamanho_total - locais[-1]) + locais[0])
+            
     return [(frag, "Fragmento", frag) for frag in sorted(fragmentos, reverse=True)]
 
-def smart_pcr_search(template, fwd_raw, rev_raw, eh_circular):
-    fwd = clean_sequence(fwd_raw)
-    rev = clean_sequence(rev_raw)
-    template = template.upper()
-    diag = {'fwd_found': False, 'rev_found': False, 'products': 0}
-    if len(fwd) < 10 or len(rev) < 10: return [], diag
+def calcular_pcr_biologico(sequencia, fwd_seq, rev_seq, eh_circular):
+    if not sequencia or sequencia.startswith("Erro"): return [], False
+    
+    # Limpeza
+    template = sequencia.upper()
+    fwd = "".join(fwd_seq.split()).upper()
+    rev = "".join(rev_seq.split()).upper()
+    
+    # Validação mínima
+    if len(fwd) < 10 or len(rev) < 10: return [], False # Primers muito curtos para PCR
 
-    SEED = 12
-    fwd_seed = fwd[-SEED:]
+    # --- LÓGICA BIOLÓGICA (3' SEED) - A que você confia ---
+    SEED_SIZE = 15
+    fwd_seed = fwd[-SEED_SIZE:] if len(fwd) > SEED_SIZE else fwd
+    rev_seed = rev[-SEED_SIZE:] if len(rev) > SEED_SIZE else rev
+    
     fwd_matches = [m.start() for m in re.finditer(fwd_seed, template)]
-    if fwd_matches: diag['fwd_found'] = True
-    
-    rev_matches = []
-    rev_seed_std = rev[-SEED:]
-    rev_rc_std = str(Seq(rev_seed_std).reverse_complement())
-    matches_std = [m.start() for m in re.finditer(rev_rc_std, template)]
-    
-    rev_seed_inv = rev[:SEED]
-    rev_compl_inv = str(Seq(rev_seed_inv).complement())
-    matches_inv = [m.start() for m in re.finditer(rev_compl_inv, template)]
-    
-    if len(matches_inv) > 0: rev_matches = matches_inv
-    elif len(matches_std) > 0: rev_matches = matches_std
-    if rev_matches: diag['rev_found'] = True
+    rev_seed_rc = str(Seq(rev_seed).reverse_complement())
+    rev_matches = [m.start() for m in re.finditer(rev_seed_rc, template)]
     
     produtos = []
+    
     for f_pos in fwd_matches:
-        f_end = f_pos + len(fwd_seed)
+        f_3prime_end = f_pos + len(fwd_seed)
+        
         for r_pos in rev_matches:
             if r_pos > f_pos:
-                dist = r_pos - f_end
-                if dist >= 0: produtos.append(len(fwd) + len(rev) + dist)
+                distancia_interna = r_pos - f_3prime_end
+                
+                if distancia_interna >= 0:
+                    tamanho_total = len(fwd) + len(rev) + distancia_interna
+                    produtos.append(tamanho_total)
+            
             elif eh_circular and r_pos < f_pos:
-                dist = (len(template) - f_end) + r_pos
-                produtos.append(len(fwd) + len(rev) + dist)
-    diag['products'] = len(produtos)
-    return [(p, "PCR", p) for p in sorted(produtos, reverse=True)], diag
+                dist_fim = len(template) - f_3prime_end
+                dist_inicio = r_pos
+                distancia_interna = dist_fim + dist_inicio
+                
+                tamanho_total = len(fwd) + len(rev) + distancia_interna
+                produtos.append(tamanho_total)
+                
+    tem_inespecificidade = len(produtos) > 1
+    
+    if not produtos:
+        return [], False
+        
+    return [(p, "PCR Product", p) for p in sorted(produtos, reverse=True)], tem_inespecificidade
 
-# --- 6. INTERFACE ---
+# --- 5. INTERFACE DO USUÁRIO ---
 
-if 'lang' not in st.session_state: st.session_state.lang = "PT"
+if 'lang' not in st.session_state:
+    st.session_state.lang = "PT"
 
 with st.sidebar:
-    st.markdown("""<div style="text-align: left; margin-bottom: 10px;"><h1 style="color: #0F766E; margin:0; font-size:24px;">BioSpark</h1><p style="font-size: 10px; color: #0F766E; margin-top:-2px;">STUDIO v2.0</p></div>""", unsafe_allow_html=True)
+    st.markdown("""
+    <div style="text-align: left; margin-bottom: 20px;">
+        <h1 style="font-family: 'Inter', sans-serif; font-weight: 800; color: #0F766E; font-size: 26px; letter-spacing: -1px; margin:0;">
+            BioSpark
+        </h1>
+        <p style="font-size: 10px; color: #0F766E; opacity: 0.7; margin:0; text-transform: uppercase; letter-spacing: 1px;">Studio</p>
+    </div>
+    """, unsafe_allow_html=True)
     st.markdown("---")
+
     lang = st.session_state.lang
-    
-    # Abas da Sidebar: Configuração e Caderno
-    tab_conf, tab_note = st.tabs(["⚙️ " + TEXTS["sidebar_config"][lang], TEXTS["notebook_title"][lang]])
-    
-    with tab_conf:
-        num_pocos = st.slider(TEXTS["sidebar_wells"][lang], 1, 15, 4)
-        agarose = st.slider(TEXTS["sidebar_agarose"][lang], 0.5, 2.0, 1.0, 0.1)
-        st.caption(TEXTS["sidebar_visual"][lang])
-        estilo_gel = st.selectbox(TEXTS["sidebar_theme"][lang], ["Profissional (Dark P&B)", "Publicação (Light P&B)", "Neon (Verde/Laranja)"])
-        
-        st.markdown("---")
-        with st.expander(f"ℹ️ {TEXTS['guide_title'][lang]}"): st.markdown(TEXTS["guide_content"][lang])
-        new_lang = st.selectbox("Lang", ["Português", "English"], index=0 if lang=="PT" else 1, label_visibility="collapsed")
-        if (new_lang == "Português" and lang != "PT") or (new_lang == "English" and lang != "EN"):
-            st.session_state.lang = "PT" if new_lang == "Português" else "EN"
-            st.rerun()
 
-    with tab_note:
-        st.session_state.lab_notebook = st.text_area("Notas:", st.session_state.lab_notebook, height=300, placeholder="Anote seus primers, conclusões e observações aqui...")
+    st.caption(TEXTS["sidebar_config"][lang])
+    
+    num_pocos = st.slider(TEXTS["sidebar_wells"][lang], 1, 15, 4)
+    agarose = st.slider(TEXTS["sidebar_agarose"][lang], 0.5, 2.0, 1.0, 0.1)
+    
+    st.divider()
+    
+    st.caption(TEXTS["sidebar_visual"][lang])
+    # Uso a chave 'sidebar_theme' que agora existe no TEXTS para evitar KeyError
+    estilo_gel = st.selectbox(
+        TEXTS["sidebar_theme"][lang], 
+        ["Profissional (Dark P&B)", "Publicação (Light P&B)", "Neon (Verde/Laranja)"]
+    )
+    
+    st.markdown("---")
+    
+    with st.expander(f"ℹ️ {TEXTS['guide_title'][lang]}"):
+        st.markdown(TEXTS["guide_content"][lang])
+    
+    st.markdown("---")
+    
+    st.caption(TEXTS["pref_lang"][lang])
+    idioma_selecionado = st.selectbox("Lang", ["Português", "English"], label_visibility="collapsed")
+    
+    novo_lang = "PT" if idioma_selecionado == "Português" else "EN"
+    if novo_lang != st.session_state.lang:
+        st.session_state.lang = novo_lang
+        st.rerun()
 
-    # RODAPÉ LATERAL
+    # RODAPÉ LATERAL - Versão Final
     st.markdown(f"""
     <div class="sidebar-footer">
-        {TEXTS['created_by'][lang]} <strong>Elton Ostetti</strong>
-        <a class="bug-report" href="mailto:e.ostetti.proppg@proppg.butantan.gov.br?subject=Bug%20Report%20BioSpark">{TEXTS['report_bug'][lang]}</a>
+        <strong>{TEXTS['created_by'][lang]} Elton Ostetti</strong><br>
+        <a class="bug-report" href="mailto:e.ostetti.proppg@proppg.butantan.gov.br?subject=Bug%20Report%20BioSpark">
+            {TEXTS['report_bug'][lang]}
+        </a>
         <br>
-        <span style="opacity:0.9;">FAPESP • USP • Instituto Butantan</span>
+        <strong>{TEXTS['ack_title'][lang]}</strong><br>
+        FAPESP<br>
+        Universidade de São Paulo (USP)<br>
+        Instituto Butantan
     </div>
     """, unsafe_allow_html=True)
 
-# --- MAIN ---
+# --- ÁREA PRINCIPAL ---
+
 st.markdown(f"# {TEXTS['header_title'][lang]}")
 st.markdown(TEXTS["header_sub"][lang])
-
-# --- ÁREA DE UPLOAD EM LOTE INTELIGENTE ---
-with st.expander(TEXTS['batch_label'][lang], expanded=False):
-    # O widget key='batch_uploader' salva a lista de arquivos no session_state automaticamente
-    st.file_uploader("Arraste arquivos (.dna, .fasta) para preencher os poços automaticamente", 
-                     type=['dna', 'fasta', 'txt'], 
-                     accept_multiple_files=True, 
-                     key="batch_uploader", 
-                     on_change=handle_batch_upload)
-
 st.markdown(" ")
+
+relatorio_dados = []
+dados_para_plotar = []
+labels_eixo_x = []
+nomes_ladders = [] 
 
 cols = st.columns(4)
-relatorio = []
-plot_data = []
-labels_x = []
 
 for i in range(num_pocos):
-    with cols[i % 4]:
+    col_atual = cols[i % 4]
+    with col_atual:
         with st.expander(f"🔹 {TEXTS['well_title'][lang]} {i+1}", expanded=(i==0)):
-            tipo_disp = st.radio("Tipo", [TEXTS['opt_sample'][lang], TEXTS['opt_pcr'][lang], TEXTS['opt_ladder'][lang]], horizontal=True, label_visibility="collapsed", key=f"t{i}")
+            # Opções
+            opcoes_tipo = [TEXTS['opt_sample'][lang], TEXTS['opt_pcr'][lang], TEXTS['opt_ladder'][lang]]
+            tipo_display = st.radio("Tipo", options=opcoes_tipo, key=f"t_{i}", horizontal=True, label_visibility="collapsed")
             
-            if tipo_disp == TEXTS['opt_ladder'][lang]:
-                lad = st.selectbox("Ladder", list(LADDERS.keys()), key=f"l{i}")
-                plot_data.append([(t, "Ladder", t) for t in LADDERS[lad]])
-                lbl = st.text_input(TEXTS['label_gel'][lang], "M", key=f"lb{i}")
-                labels_x.append(lbl)
-                relatorio.append({"Poço": i+1, "Tipo": "Ladder", "Detalhes": lad, "Bandas": str(LADDERS[lad])})
+            if tipo_display == TEXTS['opt_ladder'][lang]: tipo = "Ladder"
+            elif tipo_display == TEXTS['opt_pcr'][lang]: tipo = "PCR"
+            else: tipo = "Amostra"
+            
+            if tipo == "Ladder":
+                lad = st.selectbox(TEXTS['sel_ladder'][lang], list(LADDERS.keys()), key=f"l_{i}")
+                ladder_data = [(tam, "Ladder", tam) for tam in LADDERS[lad]]
+                dados_para_plotar.append(ladder_data)
+                
+                rotulo_custom = st.text_input(TEXTS['label_gel'][lang], value="M", key=f"lbl_{i}")
+                labels_eixo_x.append(rotulo_custom)
+                nomes_ladders.append(lad)
+                
+                relatorio_dados.append({
+                    "Poço": i+1,
+                    "Identificação": rotulo_custom,
+                    "Tipo": "Ladder",
+                    "Detalhes": lad,
+                    "Bandas (pb)": "; ".join([str(t) for t in LADDERS[lad]])
+                })
             
             else:
-                tab1, tab2 = st.tabs([TEXTS['tab_file'][lang], TEXTS['tab_text'][lang]])
-                seq, name = "", ""
+                nomes_ladders.append(None)
+                # ABAS ATUALIZADAS (TEXTO)
+                tab_f, tab_t = st.tabs([TEXTS['tab_file'][lang], TEXTS['tab_text'][lang]])
+                seq, nome_arquivo = "", ""
                 
-                # UPLOAD INDIVIDUAL
-                with tab1:
-                    f = st.file_uploader(TEXTS['upload_label'][lang], type=['dna','fasta','txt'], key=f"u{i}", label_visibility="collapsed")
-                    if f: name, seq = processar_upload(f)
-                
-                # EDITOR DE TEXTO (Conectado ao Session State para receber o Batch Upload)
-                with tab2:
-                    # key=f"tx_{i}" conecta este widget ao valor definido em handle_batch_upload
+                with tab_f:
+                    up = st.file_uploader(TEXTS['upload_label'][lang], type=['dna', 'fasta', 'txt', 'fa'], key=f"u_{i}", label_visibility="collapsed")
+                    if up: 
+                        nome_arquivo, seq = processar_upload(up)
+                        if nome_arquivo == "Erro": 
+                            st.error(seq); seq = ""
+                with tab_t:
                     txt = st.text_area(TEXTS['paste_label'][lang], height=70, key=f"tx_{i}", label_visibility="collapsed", placeholder="ATGC...")
-                    if txt and not seq: name, seq = processar_texto_manual(txt)
+                    if txt and not seq: 
+                        nome_t, seq_t = processar_texto_manual(txt)
+                        if nome_t != "Seq Manual": nome_arquivo = nome_t
+                        seq = seq_t
                 
                 st.markdown("---")
-                # RÓTULO (Conectado ao Session State)
-                val_rotulo = st.session_state.get(f"lbl_{i}", name[:15] if name else str(i+1))
-                label = st.text_input(TEXTS['label_gel'][lang], val_rotulo, key=f"lbl_{i}")
-                labels_x.append(label)
+                val_rotulo = nome_arquivo if nome_arquivo else str(i+1)
                 
-                if tipo_disp == TEXTS['opt_sample'][lang]: # Digestão
-                    c = st.checkbox(TEXTS['check_circular'][lang], True, key=f"c{i}")
-                    e = st.multiselect(TEXTS['sel_enzymes'][lang], TODAS_ENZIMAS, key=f"e{i}")
+                if tipo == "Amostra":
+                    circ = st.checkbox(TEXTS['check_circular'][lang], True, key=f"c_{i}")
+                    enz = st.multiselect(TEXTS['sel_enzymes'][lang], TODAS_ENZIMAS, key=f"e_{i}")
+                    rotulo_custom = st.text_input(TEXTS['label_gel'][lang], value=val_rotulo[:10], key=f"lbl_{i}")
+                    labels_eixo_x.append(rotulo_custom)
+
                     if seq:
-                        res = calcular_digestao(seq, e, c)
-                        plot_data.append(res)
-                        relatorio.append({"Poço": i+1, "Tipo": "Digestão", "Bandas": ";".join([str(int(x[0])) for x in res])})
-                    else: 
-                        plot_data.append([])
-                        relatorio.append({"Poço": i+1, "Tipo": "Vazio"})
-                        
-                else: # PCR
-                    fwd = st.text_input(TEXTS['pcr_fwd'][lang], key=f"fw{i}")
-                    rev = st.text_input(TEXTS['pcr_rev'][lang], key=f"rv{i}")
-                    c = st.checkbox(TEXTS['check_circular'][lang], False, key=f"cp{i}")
+                        try:
+                            res = calcular_digestao(seq, enz, circ)
+                            dados_para_plotar.append(res)
+                            
+                            fragmentos_str = "; ".join([str(int(b[0])) for b in res])
+                            desc_enzimas = ", ".join(enz) if enz else "Uncut"
+                            relatorio_dados.append({
+                                "Poço": i+1,
+                                "Identificação": rotulo_custom,
+                                "Tipo": "Digestão",
+                                "Detalhes": desc_enzimas,
+                                "Bandas (pb)": fragmentos_str
+                            })
+                        except Exception as e:
+                            dados_para_plotar.append([])
+                            st.error("Error")
+                    else:
+                        dados_para_plotar.append([])
+                        relatorio_dados.append({"Poço": i+1, "Tipo": "Vazio", "Bandas (pb)": "-"})
+
+                elif tipo == "PCR":
+                    fwd = st.text_input(TEXTS['pcr_fwd'][lang], key=f"fwd_{i}", placeholder="ATGC... (5'->3')")
+                    # Placeholder corrigido
+                    rev = st.text_input(TEXTS['pcr_rev'][lang], key=f"rev_{i}", placeholder="ATGC... (5'->3')")
+                    circ = st.checkbox(TEXTS['check_circular'][lang], False, key=f"cp_{i}")
+                    
+                    rotulo_custom = st.text_input(TEXTS['label_gel'][lang], value=f"PCR-{i+1}", key=f"lbl_{i}")
+                    labels_eixo_x.append(rotulo_custom)
                     
                     if seq and fwd and rev:
-                        res, diag = smart_pcr_search(seq, fwd, rev, c)
-                        plot_data.append(res)
-                        if not diag['fwd_found']: st.markdown(f"<p class='error-text'>{TEXTS['diag_fwd_fail'][lang]}</p>", unsafe_allow_html=True)
-                        if not diag['rev_found']: st.markdown(f"<p class='error-text'>{TEXTS['diag_rev_fail'][lang]}</p>", unsafe_allow_html=True)
-                        if diag['products'] > 1: st.markdown(f"<p class='warning-text'>{TEXTS['warn_multiple'][lang]}</p>", unsafe_allow_html=True)
-                        elif diag['products'] == 0 and diag['fwd_found'] and diag['rev_found']: st.warning(TEXTS['warn_no_product'][lang])
-                        relatorio.append({"Poço": i+1, "Tipo": "PCR", "Bandas": ";".join([str(int(x[0])) for x in res])})
+                        try:
+                            res, tem_inespecificidade = calcular_pcr_biologico(seq, fwd, rev, circ)
+                            dados_para_plotar.append(res)
+                            
+                            if tem_inespecificidade:
+                                st.markdown(f"<p class='warning-text'>{TEXTS['warn_multiple'][lang]}</p>", unsafe_allow_html=True)
+                            
+                            if not res:
+                                st.warning(TEXTS['warn_no_product'][lang])
+                            
+                            fragmentos_str = "; ".join([str(int(b[0])) for b in res])
+                            relatorio_dados.append({
+                                "Poço": i+1,
+                                "Identificação": rotulo_custom,
+                                "Tipo": "PCR",
+                                "Detalhes": f"Fwd(3'):..{fwd[-5:]} / Rev(3'):..{rev[-5:]}",
+                                "Bandas (pb)": fragmentos_str if res else "Nenhum"
+                            })
+                        except Exception as e:
+                            dados_para_plotar.append([])
+                            st.error(f"Error: {e}")
                     else:
-                        plot_data.append([])
-                        relatorio.append({"Poço": i+1, "Tipo": "Vazio"})
+                        dados_para_plotar.append([])
+                        relatorio_dados.append({"Poço": i+1, "Tipo": "Vazio", "Bandas (pb)": "-"})
 
-# --- PLOTAGEM ---
-st.markdown(" ")
-if any(plot_data):
-    if "Neon" in estilo_gel: bg, txt, c_samp, c_lad = '#111827', 'white', '#00ff41', '#ff9900'
-    elif "Profissional" in estilo_gel: bg, txt, c_samp, c_lad = '#000000', 'white', 'white', 'white'
-    else: bg, txt, c_samp, c_lad = 'white', 'black', 'black', 'black'
+st.markdown(" ") 
+st.markdown(f"### {TEXTS['result_title'][lang]}")
 
-    min_view = 20
+if any(dados_para_plotar):
+    
+    if "Neon" in estilo_gel:
+        bg_color = '#111827'; text_color = 'white'; color_sample = '#00ff41'; color_ladder = '#ff9900'
+    elif "Profissional" in estilo_gel: 
+        bg_color = '#000000'; text_color = 'white'; color_sample = 'white'; color_ladder = 'white'
+    else: 
+        bg_color = 'white'; text_color = 'black'; color_sample = 'black'; color_ladder = 'black'
+
+    # CORREÇÃO EIXO Y (FLUTUANTE) - 25pb de margem inferior
+    min_view = 25 
     max_view = 25000 / (agarose * 0.8)
+    
+    # EIXO X FIXO (VISUAL 15 POÇOS)
     max_range = max(num_pocos, 15) + 0.5
 
     fig = go.Figure()
-    for i, bands in enumerate(plot_data):
-        x = i + 1
-        is_ladder = (relatorio[i].get("Tipo") == "Ladder")
-        color = c_lad if is_ladder else c_samp
+
+    for i, bands in enumerate(dados_para_plotar):
+        x_center = i + 1
+        eh_ladder = (nomes_ladders[i] is not None)
+        cor_atual = color_ladder if eh_ladder else color_sample
+
+        if lista_bandas:
+             massa_total = sum([b[2] for b in lista_bandas]) if not eh_ladder else 1
         
-        for (size, type, real) in bands:
-            if size < (min_view * 0.9) or size > (max_view * 1.1): continue
-            
+        for (tam_aparente, tipo_banda, tam_real) in lista_bandas:
+            if tam_aparente < (min_view * 0.9) or tam_aparente > (max_view * 1.1): continue
+
             width = 2; opacity = 0.8
-            if is_ladder:
-                if size in [500, 1000, 3000]: width=5; opacity=1.0
+            if eh_ladder:
+                if tam_aparente in [3000, 1000, 500]: width = 7; opacity = 1.0
+                elif tam_aparente >= 5000: width = 5; opacity = 0.9
+                else: width = 3; opacity = 0.7
             else:
-                if type == "Supercoiled": width=4; opacity=0.7
-                elif type == "PCR": width=3; opacity=0.9
+                if type == "Supercoiled": fracao = 0.7
+                elif type == "Nicked (Relaxed)": fracao = 0.3
+                else: fracao = tam_real / massa_total if massa_total > 0 else 0.5
+                width = 3 + (8 * fracao)
+                opacity = 0.6 + (0.4 * fracao)
+
+            largura_banda = 0.28 
             
-            # ESTILO PALITO COM MARCADOR (RESTAURADO DA V1.0)
+            # VISUAL HALTERE/PALITO (LINES+MARKERS)
             fig.add_trace(go.Scatter(
-                x=[x-0.28, x+0.28], y=[size, size], mode='lines+markers',
-                line=dict(color=color, width=width), 
-                marker=dict(color=color, size=width, symbol='circle'),
+                x=[x_center - largura_banda, x_center + largura_banda],
+                y=[tam_aparente, tam_aparente],
+                mode='lines+markers',
+                line=dict(color=cor_atual, width=width),
+                marker=dict(color=cor_atual, size=width, symbol='circle'), 
                 opacity=opacity,
-                hoverinfo='text', hovertext=f"{int(size)} pb",
-                showlegend=False
+                showlegend=False,
+                hoverinfo='text',
+                hovertext=f"<b>~{int(tam_aparente)} pb</b><br>Real: {tam_real}<br>{labels_eixo_x[i]}"
             ))
-            
-            if is_ladder:
-                fig.add_trace(go.Scatter(x=[x-0.4], y=[size], mode="text", text=[str(size)], textfont=dict(color=txt, size=9), showlegend=False))
+
+            if eh_ladder:
+                fig.add_trace(go.Scatter(
+                    x=[x_center - 0.45], y=[tam_aparente], mode="text",
+                    text=[str(tam_aparente)], textposition="middle left",
+                    textfont=dict(color=text_color, size=10),
+                    showlegend=False, hoverinfo='skip'
+                ))
 
     fig.update_layout(
-        plot_bgcolor=bg, paper_bgcolor=bg, height=600,
-        margin=dict(t=30, b=30, l=50, r=30),
-        xaxis=dict(tickvals=list(range(1, num_pocos+1)), ticktext=labels_x, showgrid=False, tickfont=dict(color=txt), range=[0.5, max_range]),
-        yaxis=dict(type='log', range=[math.log10(min_view), math.log10(max_view)], showgrid=False, showticklabels=False)
+        plot_bgcolor=bg_color, paper_bgcolor=bg_color,
+        height=700, margin=dict(t=40, b=40, l=40, r=40),
+        xaxis=dict(
+            tickmode='array', tickvals=list(range(1, num_pocos + 1)),
+            ticktext=labels_eixo_x,
+            tickfont=dict(color=text_color, size=14, family='Arial Black'),
+            showgrid=False, zeroline=False, range=[0.2, max_range] 
+        ),
+        yaxis=dict(
+            type='log',
+            range=[math.log10(min_view), math.log10(max_view)],
+            showgrid=False, zeroline=False, showticklabels=False
+        )
     )
+    
     st.plotly_chart(fig, use_container_width=True)
     
-    df = pd.DataFrame(relatorio)
-    csv = df.to_csv(index=False).encode('utf-8')
     with st.expander(f"📥 {TEXTS['export_expander'][lang]}"):
-        st.download_button(TEXTS['btn_download'][lang], csv, "gel_results.csv", "text/csv")
+        df_resultados = pd.DataFrame(relatorio_dados)
+        csv = df_resultados.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label=TEXTS['btn_download'][lang],
+            data=csv,
+            file_name='gel_result.csv',
+            mime='text/csv',
+        )
+
 else:
     st.info(TEXTS['empty_msg'][lang])
 
-st.markdown("""<div class="footer"><p><b>BioSpark</b></p></div>""", unsafe_allow_html=True)
+# --- RODAPÉ ---
+st.markdown("""
+<div class="footer">
+    <p><b>BioSpark</b></p>
+</div>
+""", unsafe_allow_html=True)
