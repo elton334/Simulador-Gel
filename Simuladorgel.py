@@ -31,7 +31,7 @@ TEXTS = {
         **Modos de Uso:**
         * **Digestão:** Upload do DNA + Enzimas.
         * **PCR:** Cole os primers (Suporta overhangs).
-        * **Ladder:** Marcadores de peso molecular.
+        * **Ladder:** Escolha o marcador.
         
         **Arquivos:** .dna, .fasta, .txt
         """,
@@ -66,13 +66,13 @@ TEXTS = {
     "lab_name": { "PT": "Laboratório de Biofármacos", "EN": "Biopharmaceuticals Laboratory" },
     "institute": { "PT": "Instituto Butantan", "EN": "Butantan Institute" },
     "pref_lang": { "PT": "Idioma / Language", "EN": "Language" },
-    "report_bug": { "PT": "Reportar Erro", "EN": "Report Bug" }, # SEM EMOJI
+    "report_bug": { "PT": "Reportar Erro", "EN": "Report Bug" },
     "warn_multiple": { "PT": "⚠️ MÚLTIPLOS SÍTIOS DE LIGAÇÃO DETECTADOS!", "EN": "⚠️ MULTIPLE BINDING SITES DETECTED!" },
     "warn_no_product": { "PT": "Nenhum produto (Verifique orientação 3')", "EN": "No product (Check 3' orientation)" },
     "ack_title": { "PT": "Apoio e Afiliação", "EN": "Support & Affiliation" }
 }
 
-# --- 3. ESTILO CSS (CLEAN & BLACK) ---
+# --- 3. ESTILO CSS (SÓBRIO) ---
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
@@ -83,14 +83,12 @@ st.markdown("""
         color: #111827;
     }
 
-    /* Sidebar Clean */
     section[data-testid="stSidebar"] {
-        background-color: #F1F5F9; /* Cinza muito claro, mais neutro que o azul */
+        background-color: #F1F5F9;
         border-right: 1px solid #E2E8F0;
         padding-top: 10px;
     }
 
-    /* Sliders com a cor da marca (mantendo identidade sutil) */
     div[data-baseweb="slider"] div[class*="StyledThumb"] {
         background-color: #0F766E !important;
         border-color: #0F766E !important;
@@ -103,7 +101,7 @@ st.markdown("""
     }
 
     h1, h2, h3 {
-        color: #111827 !important; /* Preto quase absoluto */
+        color: #111827 !important;
         font-weight: 700 !important;
         letter-spacing: -0.02em;
     }
@@ -117,7 +115,7 @@ st.markdown("""
     }
     
     .stExpander:hover {
-        border-color: #94A3B8 !important; /* Cinza médio no hover */
+        border-color: #94A3B8 !important;
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
     }
 
@@ -141,7 +139,6 @@ st.markdown("""
         background-color: #0F766E !important;
     }
     
-    /* Abas Sóbrias */
     button[data-baseweb="tab"] {
         font-size: 13px !important;
         padding: 8px 12px !important;
@@ -154,12 +151,12 @@ st.markdown("""
         padding-top: 15px;
         border-top: 1px solid #CBD5E1;
         font-size: 11px;
-        color: #334155; /* Cinza Escuro */
+        color: #334155;
         line-height: 1.5;
     }
     
     .sidebar-footer strong {
-        color: #111827; /* Preto */
+        color: #111827;
         font-weight: 700;
     }
 
@@ -167,7 +164,7 @@ st.markdown("""
         font-size: 11px;
         color: #64748B;
         text-decoration: none;
-        margin-top: 5px;
+        margin-top: 10px;
         display: inline-block;
         border-bottom: 1px dotted #64748B;
     }
@@ -184,7 +181,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 4. BACKEND (LÓGICA INTACTA) ---
+# --- 4. BACKEND ---
 
 TODAS_ENZIMAS = sorted([str(e) for e in CommOnly])
 
@@ -384,18 +381,20 @@ with st.sidebar:
         st.session_state.lang = novo_lang
         st.rerun()
 
-    # RODAPÉ LATERAL - VERSÃO CLEAN & BLACK
+    # RODAPÉ LATERAL - Reportar Erro no FINAL
     st.markdown(f"""
     <div class="sidebar-footer">
         <strong>{TEXTS['created_by'][lang]} Elton Ostetti</strong><br>
+        <div style="margin-top: 8px;">
+            <strong>{TEXTS['ack_title'][lang]}</strong><br>
+            FAPESP<br>
+            Universidade de São Paulo (USP)<br>
+            Instituto Butantan
+        </div>
+        <br>
         <a class="bug-report" href="mailto:e.ostetti.proppg@proppg.butantan.gov.br?subject=Bug%20Report%20BioSpark">
             {TEXTS['report_bug'][lang]}
         </a>
-        <br><br>
-        <strong>{TEXTS['ack_title'][lang]}</strong><br>
-        FAPESP<br>
-        Universidade de São Paulo (USP)<br>
-        Instituto Butantan
     </div>
     """, unsafe_allow_html=True)
 
@@ -539,7 +538,6 @@ if any(dados_para_plotar):
     min_view = 25 
     max_view = 25000 / (agarose * 0.8)
     
-    # EIXO X FIXO PARA 15 POÇOS (Estética)
     max_range = max(num_pocos, 15) + 0.5
 
     fig = go.Figure()
@@ -569,7 +567,6 @@ if any(dados_para_plotar):
 
             largura_banda = 0.28 
             
-            # VISUAL HALTERE/PALITO (LINES+MARKERS)
             fig.add_trace(go.Scatter(
                 x=[x_center - largura_banda, x_center + largura_banda],
                 y=[tam_aparente, tam_aparente],
