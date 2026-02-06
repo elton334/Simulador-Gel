@@ -307,7 +307,7 @@ st.markdown("""
     }
     .ack-title {
         font-weight: 700;
-        color: #0F766E;
+        color: #333333;
         margin-bottom: 4px;
         display: block;
     }
