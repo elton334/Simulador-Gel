@@ -31,7 +31,7 @@ TEXTS = {
         **Modos de Uso:**
         * **Digestão:** Upload do DNA + Enzimas.
         * **PCR:** Cole os primers (Suporta overhangs).
-        * **Ladder:** Escolha o marcador.
+        * **Ladder:** Marcadores de peso molecular.
         
         **Arquivos:** .dna, .fasta, .txt
         """,
@@ -50,11 +50,8 @@ TEXTS = {
     "opt_pcr": { "PT": "PCR", "EN": "PCR" },
     "sel_ladder": { "PT": "Selecione o Ladder:", "EN": "Select Ladder:" },
     "label_gel": { "PT": "Rótulo:", "EN": "Label:" },
-    
-    # PEQUENO AJUSTE: Texto nas abas em vez de emoji solto
     "tab_file": { "PT": "📂 Upload Arquivo", "EN": "📂 Upload File" },
     "tab_text": { "PT": "📝 Digitar/Colar", "EN": "📝 Type/Paste" },
-    
     "upload_label": { "PT": "Upload DNA", "EN": "Upload DNA" },
     "paste_label": { "PT": "Sequência", "EN": "Sequence" },
     "check_circular": { "PT": "Circular?", "EN": "Circular?" },
@@ -69,27 +66,31 @@ TEXTS = {
     "lab_name": { "PT": "Laboratório de Biofármacos", "EN": "Biopharmaceuticals Laboratory" },
     "institute": { "PT": "Instituto Butantan", "EN": "Butantan Institute" },
     "pref_lang": { "PT": "Idioma / Language", "EN": "Language" },
-    "report_bug": { "PT": "🐛 Reportar Problema", "EN": "🐛 Report Bug" },
+    "report_bug": { "PT": "Reportar Erro", "EN": "Report Bug" }, # SEM EMOJI
     "warn_multiple": { "PT": "⚠️ MÚLTIPLOS SÍTIOS DE LIGAÇÃO DETECTADOS!", "EN": "⚠️ MULTIPLE BINDING SITES DETECTED!" },
     "warn_no_product": { "PT": "Nenhum produto (Verifique orientação 3')", "EN": "No product (Check 3' orientation)" },
     "ack_title": { "PT": "Apoio e Afiliação", "EN": "Support & Affiliation" }
 }
 
-# --- 3. ESTILO CSS (SÓBRIO - SEM TEXTO VERDE NO RODAPÉ) ---
+# --- 3. ESTILO CSS (CLEAN & BLACK) ---
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
     .stApp {
-        background: linear-gradient(180deg, #F0F9FF 0%, #FFFFFF 100%);
+        background: linear-gradient(180deg, #F8FAFC 0%, #FFFFFF 100%);
         font-family: 'Inter', sans-serif;
+        color: #111827;
     }
 
+    /* Sidebar Clean */
     section[data-testid="stSidebar"] {
-        background-color: #E0F7FA;
-        border-right: 1px solid #B2EBF2;
+        background-color: #F1F5F9; /* Cinza muito claro, mais neutro que o azul */
+        border-right: 1px solid #E2E8F0;
+        padding-top: 10px;
     }
 
+    /* Sliders com a cor da marca (mantendo identidade sutil) */
     div[data-baseweb="slider"] div[class*="StyledThumb"] {
         background-color: #0F766E !important;
         border-color: #0F766E !important;
@@ -98,11 +99,11 @@ st.markdown("""
         background-color: #0F766E !important;
     }
     div[data-baseweb="slider"] div[class*="StyledTrack"] {
-        background-color: #B2EBF2 !important;
+        background-color: #CBD5E1 !important;
     }
 
     h1, h2, h3 {
-        color: #0F172A !important;
+        color: #111827 !important; /* Preto quase absoluto */
         font-weight: 700 !important;
         letter-spacing: -0.02em;
     }
@@ -116,7 +117,7 @@ st.markdown("""
     }
     
     .stExpander:hover {
-        border-color: #0F766E !important;
+        border-color: #94A3B8 !important; /* Cinza médio no hover */
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
     }
 
@@ -140,35 +141,26 @@ st.markdown("""
         background-color: #0F766E !important;
     }
     
-    /* Abas legíveis */
+    /* Abas Sóbrias */
     button[data-baseweb="tab"] {
-        font-size: 14px !important;
-        padding: 10px !important;
+        font-size: 13px !important;
+        padding: 8px 12px !important;
+        color: #334155 !important;
     }
 
-    .footer {
-        width: 100%;
-        text-align: center;
-        padding: 20px 0;
-        font-size: 11px;
-        color: #64748B;
-        border-top: 1px solid #CBD5E1;
-        margin-top: 40px;
-        opacity: 0.8;
-    }
-    
-    /* RODAPÉ DA SIDEBAR: PRETO E COMPACTO */
+    /* RODAPÉ LATERAL PROFISSIONAL */
     .sidebar-footer {
         margin-top: 20px;
         padding-top: 15px;
-        border-top: 1px solid #B2EBF2;
+        border-top: 1px solid #CBD5E1;
         font-size: 11px;
-        color: #111827; /* Preto suave */
+        color: #334155; /* Cinza Escuro */
         line-height: 1.5;
     }
     
     .sidebar-footer strong {
-        color: #0F766E; /* Destaque apenas no nome/título */
+        color: #111827; /* Preto */
+        font-weight: 700;
     }
 
     .bug-report {
@@ -177,10 +169,11 @@ st.markdown("""
         text-decoration: none;
         margin-top: 5px;
         display: inline-block;
+        border-bottom: 1px dotted #64748B;
     }
     .bug-report:hover {
         color: #0F766E;
-        text-decoration: underline;
+        border-bottom: 1px solid #0F766E;
     }
     
     .warning-text {
@@ -191,7 +184,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 4. BACKEND (LÓGICA INTACTA DA VERSÃO QUE FUNCIONA) ---
+# --- 4. BACKEND (LÓGICA INTACTA) ---
 
 TODAS_ENZIMAS = sorted([str(e) for e in CommOnly])
 
@@ -307,10 +300,8 @@ def calcular_pcr_biologico(sequencia, fwd_seq, rev_seq, eh_circular):
     fwd = "".join(fwd_seq.split()).upper()
     rev = "".join(rev_seq.split()).upper()
     
-    # Validação mínima
-    if len(fwd) < 10 or len(rev) < 10: return [], False # Primers muito curtos para PCR
+    if len(fwd) < 10 or len(rev) < 10: return [], False
 
-    # --- LÓGICA BIOLÓGICA (3' SEED) ---
     SEED_SIZE = 15
     fwd_seed = fwd[-SEED_SIZE:] if len(fwd) > SEED_SIZE else fwd
     rev_seed = rev[-SEED_SIZE:] if len(rev) > SEED_SIZE else rev
@@ -327,6 +318,7 @@ def calcular_pcr_biologico(sequencia, fwd_seq, rev_seq, eh_circular):
         for r_pos in rev_matches:
             if r_pos > f_pos:
                 distancia_interna = r_pos - f_3prime_end
+                
                 if distancia_interna >= 0:
                     tamanho_total = len(fwd) + len(rev) + distancia_interna
                     produtos.append(tamanho_total)
@@ -357,7 +349,7 @@ with st.sidebar:
         <h1 style="font-family: 'Inter', sans-serif; font-weight: 800; color: #0F766E; font-size: 26px; letter-spacing: -1px; margin:0;">
             BioSpark
         </h1>
-        <p style="font-size: 10px; color: #0F766E; opacity: 0.7; margin:0; text-transform: uppercase; letter-spacing: 1px;">Studio</p>
+        <p style="font-size: 10px; color: #334155; opacity: 0.8; margin:0; text-transform: uppercase; letter-spacing: 1px;">Studio</p>
     </div>
     """, unsafe_allow_html=True)
     st.markdown("---")
@@ -392,19 +384,18 @@ with st.sidebar:
         st.session_state.lang = novo_lang
         st.rerun()
 
-    # RODAPÉ COM CRÉDITOS (Corrigido para preto e sem "bolsa")
+    # RODAPÉ LATERAL - VERSÃO CLEAN & BLACK
     st.markdown(f"""
     <div class="sidebar-footer">
         <strong>{TEXTS['created_by'][lang]} Elton Ostetti</strong><br>
         <a class="bug-report" href="mailto:e.ostetti.proppg@proppg.butantan.gov.br?subject=Bug%20Report%20BioSpark">
             {TEXTS['report_bug'][lang]}
         </a>
-        <div class="ack-box" style="margin-top:10px;">
-            <span class="ack-title" style="color:#0F766E; font-weight:700;">{TEXTS['ack_title'][lang]}</span><br>
-            FAPESP<br>
-            Universidade de São Paulo (USP)<br>
-            Instituto Butantan
-        </div>
+        <br><br>
+        <strong>{TEXTS['ack_title'][lang]}</strong><br>
+        FAPESP<br>
+        Universidade de São Paulo (USP)<br>
+        Instituto Butantan
     </div>
     """, unsafe_allow_html=True)
 
@@ -425,6 +416,7 @@ for i in range(num_pocos):
     col_atual = cols[i % 4]
     with col_atual:
         with st.expander(f"🔹 {TEXTS['well_title'][lang]} {i+1}", expanded=(i==0)):
+            # Opções
             opcoes_tipo = [TEXTS['opt_sample'][lang], TEXTS['opt_pcr'][lang], TEXTS['opt_ladder'][lang]]
             tipo_display = st.radio("Tipo", options=opcoes_tipo, key=f"t_{i}", horizontal=True, label_visibility="collapsed")
             
@@ -544,8 +536,7 @@ if any(dados_para_plotar):
     else: 
         bg_color = 'white'; text_color = 'black'; color_sample = 'black'; color_ladder = 'black'
 
-    # AJUSTE FINO NO EIXO Y PARA NÃO CORTAR 100pb
-    min_view = 50 
+    min_view = 25 
     max_view = 25000 / (agarose * 0.8)
     
     # EIXO X FIXO PARA 15 POÇOS (Estética)
@@ -562,7 +553,6 @@ if any(dados_para_plotar):
              massa_total = sum([b[2] for b in lista_bandas]) if not eh_ladder else 1
         
         for (tam_aparente, tipo_banda, tam_real) in lista_bandas:
-            # Filtro ajustado
             if tam_aparente < (min_view * 0.9) or tam_aparente > (max_view * 1.1): continue
 
             width = 2; opacity = 0.8
@@ -579,15 +569,15 @@ if any(dados_para_plotar):
 
             largura_banda = 0.28 
             
-            # MANTIVE A LÓGICA EXATA DO VISUAL
+            # VISUAL HALTERE/PALITO (LINES+MARKERS)
             fig.add_trace(go.Scatter(
                 x=[x_center - largura_banda, x_center + largura_banda],
                 y=[tam_aparente, tam_aparente],
-                mode='lines+markers', # RESTAURADO: LINES+MARKERS
+                mode='lines+markers',
                 line=dict(color=cor_atual, width=width),
-                marker=dict(color=cor_atual, size=width, symbol='circle'), # RESTAURADO: BOLINHAS
+                marker=dict(color=cor_atual, size=width, symbol='circle'), 
                 opacity=opacity,
-                showlegend=False, # IMPORTANTE: REMOVE A LEGENDA LATERAL
+                showlegend=False,
                 hoverinfo='text',
                 hovertext=f"<b>~{int(tam_aparente)} pb</b><br>Real: {tam_real}<br>{labels_eixo_x[i]}"
             ))
